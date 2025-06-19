@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 // IMPORTANT: Replace this with the URL of your deployed Render backend later
 // For now, it will use localhost for testing against your local backend.
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
-const WS_URL = 'ws://localhost:8080'; // For local testing against your local backend
+const WS_URL = 'https://satin-lumbar-book.glitch.me'; // For local testing against your local backend
 
 export default function ExquisiteCorpseGame() {
 	const canvasRef = useRef(null);
