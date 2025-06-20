@@ -190,20 +190,28 @@ export default function ExquisiteCorpseGame() {
 
 	const startDrawing = useCallback(
 		(e) => {
-			if (!canDrawOnCanvas || isGameOver) return; // Only allow drawing if permitted and not game over
+			// Add null check for contextRef.current
+			if (!contextRef.current || !canDrawOnCanvas || isGameOver) return;
 			const { offsetX, offsetY } = e.nativeEvent;
 			setIsDrawing(true);
 			setLastX(offsetX);
 			setLastY(offsetY);
 			contextRef.current.beginPath();
-			contextRef.current.moveTo(offsetX, offsetY); // Added this line to start drawing from the click point
+			contextRef.current.moveTo(offsetX, offsetY);
 		},
 		[canDrawOnCanvas, isGameOver]
 	);
 
 	const draw = useCallback(
 		(e) => {
-			if (!isDrawing || !canDrawOnCanvas || isGameOver) return;
+			// Add null check for contextRef.current
+			if (
+				!isDrawing ||
+				!contextRef.current ||
+				!canDrawOnCanvas ||
+				isGameOver
+			)
+				return;
 			const { offsetX, offsetY } = e.nativeEvent;
 			contextRef.current.lineTo(offsetX, offsetY);
 			contextRef.current.stroke();
@@ -214,7 +222,8 @@ export default function ExquisiteCorpseGame() {
 	);
 
 	const stopDrawing = useCallback(() => {
-		if (!canDrawOnCanvas || isGameOver) return;
+		// Add null check for contextRef.current
+		if (!contextRef.current || !canDrawOnCanvas || isGameOver) return;
 		setIsDrawing(false);
 		contextRef.current.closePath();
 	}, [canDrawOnCanvas, isGameOver]);
