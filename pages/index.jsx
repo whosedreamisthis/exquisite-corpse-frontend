@@ -112,25 +112,11 @@ export default function ExquisiteCorpseGame() {
 					const canvas = canvasRef.current;
 					const ctx = contextRef.current;
 					if (canvas && ctx) {
-						if (
-							data.currentSegmentIndex === 0 &&
-							!data.canvasData // Only clear if it's the very first segment (Head) and no previous data
-						) {
-							ctx.clearRect(0, 0, canvas.width, canvas.height);
-							setReceivedCanvasImage(null); // Clear any previous image
-							console.log(
-								'[WS Message] Cleared canvas for new game/segment 0.'
-							);
-						} else if (data.canvasData) {
+						clearCanvas(); // Always clear before drawing a new background
+						if (data.canvasData) {
 							// Later segment or rejoining, draw the received image as background
 							const img = new Image();
 							img.onload = () => {
-								ctx.clearRect(
-									0,
-									0,
-									canvas.width,
-									canvas.height
-								); // Clear existing before drawing new background
 								ctx.drawImage(
 									img,
 									0,
@@ -182,6 +168,8 @@ export default function ExquisiteCorpseGame() {
 					console.log(
 						`[WS Message - submissionReceived] canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
 					);
+					// Clear canvas here only for the submitting player
+					clearCanvas();
 					break;
 
 				case 'playerSubmitted': // Sent to other players when one player submits
@@ -189,7 +177,9 @@ export default function ExquisiteCorpseGame() {
 					console.log(
 						`[WS Message - playerSubmitted] Message: ${data.message}`
 					);
-					// Their own canDraw/isWaitingForOthers state should not change by this message
+					// This message does NOT change canDraw or isWaitingForOthers for the receiving player.
+					// If they haven't submitted, they should still be able to draw.
+					// If they have submitted (and already handled by submissionReceived), they should remain waiting.
 					break;
 
 				case 'segmentAdvanced': // Sent to ALL players when a new segment starts
@@ -210,12 +200,7 @@ export default function ExquisiteCorpseGame() {
 					const canvasAdvanced = canvasRef.current;
 					const ctxAdvanced = contextRef.current;
 					if (canvasAdvanced && ctxAdvanced) {
-						ctxAdvanced.clearRect(
-							0,
-							0,
-							canvasAdvanced.width,
-							canvasAdvanced.height
-						); // Clear existing before drawing new background
+						clearCanvas(); // Always clear before drawing a new background
 						if (data.canvasData) {
 							const img = new Image();
 							img.onload = () => {
@@ -278,6 +263,10 @@ export default function ExquisiteCorpseGame() {
 					clearCanvas();
 					setMessage(data.message);
 					console.log('[WS Message] Backend requested canvas clear.');
+					// After clear, if it's their turn, they should be able to draw
+					// (assuming clearCanvas is an action someone takes to restart current drawing)
+					setCanDrawOnCanvas(true); // Re-enable drawing
+					setIsWaitingForOtherPlayers(false); // No longer waiting
 					break;
 
 				default:
@@ -325,7 +314,7 @@ export default function ExquisiteCorpseGame() {
 				console.log('[useEffect cleanup] WebSocket closed.');
 			}
 		};
-	}, [clearCanvas]);
+	}, [clearCanvas]); // clearCanvas is now a dependency
 
 	// --- Drawing Functions ---
 	const draw = useCallback(
@@ -334,14 +323,14 @@ export default function ExquisiteCorpseGame() {
 			if (
 				!isDrawing ||
 				!canvasRef.current ||
-				!contextRef.current || // contextRef.current should now be reliably available
+				!contextRef.current ||
 				!canDrawOnCanvas
 			) {
 				return;
 			}
 
 			const canvas = canvasRef.current;
-			const ctx = contextRef.current; // Use context from ref
+			const ctx = contextRef.current;
 			const rect = canvas.getBoundingClientRect();
 
 			// Handle both mouse and touch events
@@ -359,20 +348,17 @@ export default function ExquisiteCorpseGame() {
 			setLastX(currentX);
 			setLastY(currentY);
 		},
-		[isDrawing, lastX, lastY, canDrawOnCanvas] // Depend on canDrawOnCanvas
+		[isDrawing, lastX, lastY, canDrawOnCanvas]
 	);
 
 	const handleMouseDown = useCallback(
 		(e) => {
-			e.preventDefault(); // Prevent scrolling on touch devices
-			// Diagnostic log for debugging drawing start
+			e.preventDefault();
 			console.log(
 				`[handleMouseDown] canDrawOnCanvas: ${canDrawOnCanvas}, canvasRef.current: ${!!canvasRef.current}, contextRef.current: ${!!contextRef.current}`
 			);
 
-			// Only allow drawing if in drawing phase
 			if (!canvasRef.current || !contextRef.current || !canDrawOnCanvas) {
-				// contextRef.current should now be reliably available
 				console.log(
 					'[handleMouseDown] Drawing start aborted: conditions not met (canvas/context not ready or not permitted).'
 				);
@@ -383,7 +369,6 @@ export default function ExquisiteCorpseGame() {
 			const rect = canvasRef.current.getBoundingClientRect();
 			const clientX = e.touches ? e.touches[0].clientX : e.clientX;
 			const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
 			setLastX(clientX - rect.left);
 			setLastY(clientY - rect.top);
 			console.log(
@@ -392,7 +377,7 @@ export default function ExquisiteCorpseGame() {
 				}, ${clientY - rect.top}).`
 			);
 		},
-		[canDrawOnCanvas] // Depend on canDrawOnCanvas
+		[canDrawOnCanvas]
 	);
 
 	const handleMouseUp = useCallback(() => {
@@ -402,7 +387,7 @@ export default function ExquisiteCorpseGame() {
 
 	const handleMouseMove = useCallback(
 		(e) => {
-			e.preventDefault(); // Prevent scrolling on touch devices
+			e.preventDefault();
 			draw(e);
 		},
 		[draw]
@@ -424,7 +409,6 @@ export default function ExquisiteCorpseGame() {
 		}
 
 		const ws = wsRef.current;
-		// Check if connection is open before sending
 		if (ws && ws.readyState === WebSocket.OPEN) {
 			console.log(
 				`[joinOrCreateGame] Sending joinGame for gameCode: ${gameCode}`
@@ -433,7 +417,7 @@ export default function ExquisiteCorpseGame() {
 				JSON.stringify({
 					type: 'joinGame',
 					gameCode: gameCode,
-					nickname: `Player${Math.floor(Math.random() * 1000)}`, // Simple dynamic nickname
+					nickname: `Player${Math.floor(Math.random() * 1000)}`,
 				})
 			);
 			setMessage(`Attempting to join/create game ${gameCode}...`);
@@ -450,7 +434,6 @@ export default function ExquisiteCorpseGame() {
 		const canvas = canvasRef.current;
 		const ctx = contextRef.current;
 
-		// Diagnostic log: ALL conditions for submission
 		console.log(`--- [submitSegment] Check conditions before sending ---`);
 		console.log(
 			`WS readyState: ${
@@ -460,7 +443,7 @@ export default function ExquisiteCorpseGame() {
 			}`
 		);
 		console.log(`canvasRef.current: ${!!canvasRef.current}`);
-		console.log(`contextRef.current: ${!!contextRef.current}`); // Should be true now
+		console.log(`contextRef.current: ${!!contextRef.current}`);
 		console.log(`gameRoomId: ${gameRoomId}`);
 		console.log(`playerCount: ${playerCount}`);
 		console.log(
@@ -474,8 +457,8 @@ export default function ExquisiteCorpseGame() {
 			!wsRef.current ||
 			wsRef.current.readyState !== WebSocket.OPEN ||
 			!canvas ||
-			!ctx || // Now 'ctx' should be reliably available
-			!gameRoomId // Ensure gameRoomId is set from the WebSocket connection
+			!ctx ||
+			!gameRoomId
 		) {
 			setMessage(
 				'Not connected to the game server or canvas not ready. Please join a game.'
@@ -509,11 +492,11 @@ export default function ExquisiteCorpseGame() {
 			return;
 		}
 
-		const canvasData = canvas.toDataURL('image/png'); // Get the current canvas content as a Data URL
+		const canvasData = canvas.toDataURL('image/png');
 		wsRef.current.send(
 			JSON.stringify({
 				type: 'submitSegment',
-				gameRoomId: gameRoomId, // The gameRoomId comes from the WS server's 'playerJoined' message
+				gameRoomId: gameRoomId,
 				segmentIndex: currentSegmentIndex,
 				canvasData: canvasData,
 			})
@@ -609,7 +592,7 @@ export default function ExquisiteCorpseGame() {
 						height={600}
 						className="border-2 border-gray-400 rounded-lg bg-white w-full max-w-full h-auto block mx-auto mb-6"
 						style={{
-							touchAction: 'none', // Disable default touch actions for drawing
+							touchAction: 'none',
 							cursor: canDrawOnCanvas
 								? 'crosshair'
 								: 'not-allowed',
