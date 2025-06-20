@@ -36,28 +36,33 @@ export default function ExquisiteCorpseGame() {
 	const [isGameOver, setIsGameOver] = useState(false);
 	const [finalArtwork, setFinalArtwork] = useState(null); // Stores the final combined artwork
 	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
+	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
 
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		// Only connect if we haven't already and are about to join a game
+		// CRITICAL: Ensure wsRef.current is null to prevent re-connections
 		if (hasJoinedGame && !wsRef.current) {
+			console.log('Attempting to establish WebSocket connection...');
 			const ws = new WebSocket(WS_URL);
 			wsRef.current = ws;
 
+			// Capture the current values for initial joinGame message
+			const codeToJoinOnOpen = generatedGameCode || gameCode;
+			const nameForJoin = playerName;
+
 			ws.onopen = () => {
-				console.log('WebSocket connected.');
+				console.log('WebSocket connected. Sending joinGame message...');
 				// After connection, send the joinGame message with the correct code
-				const codeToJoin = generatedGameCode || gameCode; // Use generated if creating, else user input
-				if (codeToJoin) {
-					ws.send(
-						JSON.stringify({
-							type: 'joinGame',
-							gameCode: codeToJoin,
-							playerId: ws.id, // Player ID is set by the server on connection
-							playerName: playerName,
-						})
-					);
-				}
+				// playerId is sent as null initially; the server will assign and send it back.
+				ws.send(
+					JSON.stringify({
+						type: 'joinGame',
+						gameCode: codeToJoinOnOpen,
+						playerId: null, // Send null initially, server will set this
+						playerName: nameForJoin,
+					})
+				);
 			};
 
 			ws.onmessage = (event) => {
@@ -70,6 +75,12 @@ export default function ExquisiteCorpseGame() {
 				setCanDrawOnCanvas(data.canDraw || false);
 				setIsWaitingForOtherPlayers(data.isWaitingForOthers || false);
 				setGameRoomId(data.gameRoomId || null);
+
+				// Set the current player's WebSocket ID if received from the server
+				// Only update if the ID is provided and different from current state
+				if (data.playerId && data.playerId !== currentPlayersWsId) {
+					setCurrentPlayersWsId(data.playerId);
+				}
 
 				if (data.canvasData) {
 					setReceivedCanvasImage(data.canvasData);
@@ -87,13 +98,18 @@ export default function ExquisiteCorpseGame() {
 				}
 
 				// Initial state request: when a player connects or re-connects
-				if (data.type === 'initialState') {
-					setGameCode(data.gameCode); // Update gameCode if coming from initialState
-					setGeneratedGameCode(data.gameCode); // Also update generated if it's the current game
+				if (
+					data.type === 'initialState' ||
+					data.type === 'gameStarted'
+				) {
+					// These state updates are fine as they don't trigger the WebSocket useEffect again,
+					// because the relevant variables are no longer in its dependency array.
+					setGameCode(data.gameCode || gameCode); // Use received code, fallback to existing
+					setGeneratedGameCode(data.gameCode || generatedGameCode); // Use received code, fallback to existing
 					setCanDrawOnCanvas(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
 					setReceivedCanvasImage(data.canvasData);
-					setFinalArtwork(data.finalArtwork || null); // Final artwork for completed games
+					setFinalArtwork(data.finalArtwork || null);
 					if (data.status === 'completed') {
 						setIsGameOver(true);
 					} else {
@@ -108,19 +124,33 @@ export default function ExquisiteCorpseGame() {
 					'Disconnected from game. Please refresh to rejoin or create a new game.'
 				);
 				setHasJoinedGame(false); // Go back to initial screen
+				setCurrentPlayersWsId(null); // Clear player ID on disconnect
+				wsRef.current = null; // CRITICAL: Clear the ref so a new connection can be attempted next time
 			};
 
 			ws.onerror = (error) => {
 				console.error('WebSocket error:', error);
 				setMessage('WebSocket error. Check console for details.');
+				wsRef.current = null; // Clear ref on error too
 			};
 
+			// Cleanup function: This runs when the component unmounts or before the effect re-runs
 			return () => {
-				ws.close();
+				if (
+					wsRef.current &&
+					wsRef.current.readyState === WebSocket.OPEN
+				) {
+					console.log('Cleaning up WebSocket connection...');
+					wsRef.current.close();
+				}
+				wsRef.current = null; // Ensure the ref is cleared
 			};
 		}
-	}, [hasJoinedGame, generatedGameCode, gameCode, playerName]); // Re-run effect if gameCode or playerName changes for join
+		// CRITICAL CHANGE: The dependency array now only includes `hasJoinedGame`.
+		// This ensures the WebSocket connection logic only runs when we explicitly intend to connect.
+	}, [hasJoinedGame]);
 
+	// Canvas setup and drawing logic (remains mostly the same)
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
@@ -156,7 +186,8 @@ export default function ExquisiteCorpseGame() {
 			// Clear canvas if it's the first segment and no image is received
 			context.clearRect(0, 0, canvas.width, canvas.height);
 		}
-	}, [canvasRef.current, receivedCanvasImage, currentSegmentIndex]); // Added canvasRef.current to dependencies
+	}, [canvasRef.current, receivedCanvasImage, currentSegmentIndex]);
+
 	const startDrawing = useCallback(
 		(e) => {
 			if (!canDrawOnCanvas || isGameOver) return; // Only allow drawing if permitted and not game over
@@ -165,7 +196,7 @@ export default function ExquisiteCorpseGame() {
 			setLastX(offsetX);
 			setLastY(offsetY);
 			contextRef.current.beginPath();
-			contextRef.current.moveTo(offsetX, offsetY);
+			contextRef.current.moveTo(offsetX, offsetY); // Added this line to start drawing from the click point
 		},
 		[canDrawOnCanvas, isGameOver]
 	);
@@ -207,7 +238,7 @@ export default function ExquisiteCorpseGame() {
 				type: 'submitSegment',
 				gameRoomId: gameRoomId,
 				canvasData: dataURL,
-				playerId: wsRef.current.id,
+				playerId: currentPlayersWsId, // Use the state variable for player ID
 			})
 		);
 		setMessage(
