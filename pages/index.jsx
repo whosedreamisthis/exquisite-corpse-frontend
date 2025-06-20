@@ -121,7 +121,6 @@ export default function ExquisiteCorpseGame() {
 		}
 	}, [hasJoinedGame, generatedGameCode, gameCode, playerName]); // Re-run effect if gameCode or playerName changes for join
 
-	// Canvas setup and drawing logic
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
@@ -157,8 +156,7 @@ export default function ExquisiteCorpseGame() {
 			// Clear canvas if it's the first segment and no image is received
 			context.clearRect(0, 0, canvas.width, canvas.height);
 		}
-	}, [receivedCanvasImage, currentSegmentIndex]); // Depend on receivedCanvasImage
-
+	}, [canvasRef.current, receivedCanvasImage, currentSegmentIndex]); // Added canvasRef.current to dependencies
 	const startDrawing = useCallback(
 		(e) => {
 			if (!canDrawOnCanvas || isGameOver) return; // Only allow drawing if permitted and not game over
