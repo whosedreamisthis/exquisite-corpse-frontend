@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import axios from 'axios'; // Import axios for HTTP requests
 
 // IMPORTANT: Replace this with the URL of your deployed Render backend later
 // For now, it will use localhost for testing against your local backend.
@@ -19,605 +20,376 @@ export default function ExquisiteCorpseGame() {
 	const [lastY, setLastY] = useState(0);
 
 	// Game State Variables, all managed via WebSocket
-	const [gameCode, setGameCode] = useState(''); // User input for game code
+	const [gameCode, setGameCode] = useState(''); // User input for joining game code
+	const [generatedGameCode, setGeneratedGameCode] = useState(''); // Game code received from createGame API
 	const [gameRoomId, setGameRoomId] = useState(null); // Actual DB ID of the game room, set by WS
 	const [message, setMessage] = useState(
 		'Enter a game code to join or create one!'
 	);
 	const [playerCount, setPlayerCount] = useState(0); // Tracks how many players are in the room
-	const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0); // Current drawing segment (0: Head, 1: Torso, etc.)
-	const [receivedCanvasImage, setReceivedCanvasImage] = useState(null); // Stores the image from previous combined segments
-	const [canDrawOnCanvas, setCanDrawOnCanvas] = useState(false); // Frontend state for drawing ability
+	const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0); // Which part is being drawn (0-Head, 1-Torso, etc.)
+	const [canDrawOnCanvas, setCanDrawOnCanvas] = useState(false); // Whether the current player can draw
 	const [isWaitingForOtherPlayers, setIsWaitingForOtherPlayers] =
-		useState(false); // True after *this player* submits, waiting for others
-	const [isGameOver, setIsGameOver] = useState(false); // True when the game has ended
-	const [finalArtwork, setFinalArtwork] = useState(null); // Stores the final combined artwork from gameOver message
+		useState(false); // Whether current player submitted and is waiting
+	const [receivedCanvasImage, setReceivedCanvasImage] = useState(null); // Data URL for the previous segment's peek
+	const [playerName, setPlayerName] = useState(''); // State for player name input
+	const [isGameOver, setIsGameOver] = useState(false);
+	const [finalArtwork, setFinalArtwork] = useState(null); // Stores the final combined artwork
+	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
 
-	// --- Utility to clear canvas ---
-	const clearCanvas = useCallback(() => {
-		const canvas = canvasRef.current;
-		if (canvas && contextRef.current) {
-			contextRef.current.clearRect(0, 0, canvas.width, canvas.height);
-			setReceivedCanvasImage(null); // Clear any background image
-			console.log(
-				'[clearCanvas] Canvas cleared and receivedCanvasImage reset.'
-			);
-		}
-	}, []);
-
-	// --- Canvas Context Initialization (runs once on mount, as canvas is now always in DOM) ---
+	// WebSocket Initialization and Message Handling
 	useEffect(() => {
-		const canvas = canvasRef.current;
-		if (!canvas) {
-			console.error(
-				'[useEffect Canvas Init] Canvas ref is null after initial render. This should not happen now.'
-			);
-			return;
-		}
+		// Only connect if we haven't already and are about to join a game
+		if (hasJoinedGame && !wsRef.current) {
+			const ws = new WebSocket(WS_URL);
+			wsRef.current = ws;
 
-		const ctx = canvas.getContext('2d');
-		if (ctx) {
-			contextRef.current = ctx; // Store context in ref
+			ws.onopen = () => {
+				console.log('WebSocket connected.');
+				// After connection, send the joinGame message with the correct code
+				const codeToJoin = generatedGameCode || gameCode; // Use generated if creating, else user input
+				if (codeToJoin) {
+					ws.send(
+						JSON.stringify({
+							type: 'joinGame',
+							gameCode: codeToJoin,
+							playerId: ws.id, // Player ID is set by the server on connection
+							playerName: playerName,
+						})
+					);
+				}
+			};
 
-			ctx.lineCap = 'round';
-			ctx.strokeStyle = 'black';
-			ctx.lineWidth = 2;
+			ws.onmessage = (event) => {
+				const data = JSON.parse(event.data);
+				console.log('Received from server:', data);
 
-			ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas on initial load
-			console.log(
-				'[useEffect Canvas Init] Canvas context initialized and cleared.'
-			);
-		} else {
-			console.error(
-				'[useEffect Canvas Init] Could not get 2D context from canvas.'
-			);
-		}
-	}, []); // Empty dependency array because canvasRef.current is now always available from the start
+				setMessage(data.message);
+				setPlayerCount(data.playerCount || 0);
+				setCurrentSegmentIndex(data.currentSegmentIndex || 0);
+				setCanDrawOnCanvas(data.canDraw || false);
+				setIsWaitingForOtherPlayers(data.isWaitingForOthers || false);
+				setGameRoomId(data.gameRoomId || null);
 
-	// --- WebSocket Connection & Message Handling ---
-	useEffect(() => {
-		console.log('[useEffect] Initializing WebSocket...');
-		wsRef.current = new WebSocket(WS_URL);
+				if (data.canvasData) {
+					setReceivedCanvasImage(data.canvasData);
+				} else {
+					setReceivedCanvasImage(null); // Clear if no canvas data
+				}
 
-		wsRef.current.onopen = () => {
-			console.log('WebSocket connected!');
-			setMessage(
-				'Connected to server. Enter a game code to join or create!'
-			);
-		};
+				if (data.type === 'gameOver') {
+					setIsGameOver(true);
+					setFinalArtwork(data.finalArtwork);
+					setCanDrawOnCanvas(false);
+				} else if (data.type === 'playerDisconnected') {
+					setIsGameOver(false); // Reset if game was over but player disconnected
+					setFinalArtwork(null);
+				}
 
-		wsRef.current.onmessage = (event) => {
-			const data = JSON.parse(event.data);
-			console.log('Received from server (full data):', data); // Log full data for inspection
-
-			switch (data.type) {
-				case 'playerJoined': // Broadcast when a player joins, or re-sent to all to update state
-				case 'gameStarted': // Sent when game transitions from waiting to in-progress (2 players joined)
-					setGameRoomId(data.gameRoomId); // The backend assigns and sends the gameRoomId
-					setPlayerCount(data.playerCount);
-					setCurrentSegmentIndex(data.currentSegmentIndex);
-					setMessage(data.message);
-					setIsGameOver(false); // Ensure not game over if it was before
-					setFinalArtwork(null); // Clear any previous final artwork
-
-					// These are the critical values to check from the backend
+				// Initial state request: when a player connects or re-connects
+				if (data.type === 'initialState') {
+					setGameCode(data.gameCode); // Update gameCode if coming from initialState
+					setGeneratedGameCode(data.gameCode); // Also update generated if it's the current game
 					setCanDrawOnCanvas(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
-
-					console.log(
-						`[WS Message - ${data.type}] After setting states: gameRoomId=${data.gameRoomId}, canDraw=${data.canDraw}, isWaitingForOthers=${data.isWaitingForOthers}`
-					);
-
-					// Handle canvas display for the new segment
-					const canvas = canvasRef.current;
-					const ctx = contextRef.current;
-					if (canvas && ctx) {
-						clearCanvas(); // Always clear before drawing a new background
-						if (data.canvasData) {
-							// Later segment or rejoining, draw the received image as background
-							const img = new Image();
-							img.onload = () => {
-								ctx.drawImage(
-									img,
-									0,
-									0,
-									canvas.width,
-									canvas.height
-								); // Draw combined previous
-								console.log(
-									'[WS Message] Drawn received canvasData onto canvas.'
-								);
-							};
-							img.onerror = (e) =>
-								console.error(
-									'Error loading received canvas image on playerJoined/gameStarted:',
-									e
-								);
-							img.src = data.canvasData;
-							setReceivedCanvasImage(data.canvasData);
-						}
+					setReceivedCanvasImage(data.canvasData);
+					setFinalArtwork(data.finalArtwork || null); // Final artwork for completed games
+					if (data.status === 'completed') {
+						setIsGameOver(true);
+					} else {
+						setIsGameOver(false);
 					}
-					break;
+				}
+			};
 
-				case 'playerDisconnected':
-					setPlayerCount(data.playerCount);
-					setMessage(data.message);
-					setCanDrawOnCanvas(data.canDraw); // Server will likely send false
-					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Server will likely send false
-					setIsGameOver(false);
-					console.log(
-						`[WS Message - playerDisconnected] playerCount: ${data.playerCount}, canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
-					);
-					// Optionally clear canvas or reset game if only one player remains, or if game becomes unplayable
-					if (data.playerCount < 2) {
-						clearCanvas();
-						setGameRoomId(null); // Game effectively ended for this client
-						setMessage(
-							'Another player disconnected. Please create or join a new game.'
-						);
-						console.log(
-							'[WS Message - playerDisconnected] Game room ID cleared due to low players.'
-						);
-					}
-					break;
+			ws.onclose = () => {
+				console.log('WebSocket disconnected.');
+				setMessage(
+					'Disconnected from game. Please refresh to rejoin or create a new game.'
+				);
+				setHasJoinedGame(false); // Go back to initial screen
+			};
 
-				case 'submissionReceived': // This is sent ONLY to the player who submitted
-					setMessage(data.message);
-					setCanDrawOnCanvas(data.canDraw); // Submitting player gets canDraw: false
-					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Submitting player gets isWaitingForOthers: true
-					console.log(
-						`[WS Message - submissionReceived] canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
-					);
-					// Clear canvas here only for the submitting player
-					clearCanvas();
-					break;
+			ws.onerror = (error) => {
+				console.error('WebSocket error:', error);
+				setMessage('WebSocket error. Check console for details.');
+			};
 
-				case 'playerSubmitted': // Sent to other players when one player submits
-					setMessage(data.message);
-					console.log(
-						`[WS Message - playerSubmitted] Message: ${data.message}`
-					);
-					// This message does NOT change canDraw or isWaitingForOthers for the receiving player.
-					// If they haven't submitted, they should still be able to draw.
-					// If they have submitted (and already handled by submissionReceived), they should remain waiting.
-					break;
+			return () => {
+				ws.close();
+			};
+		}
+	}, [hasJoinedGame, generatedGameCode, gameCode, playerName]); // Re-run effect if gameCode or playerName changes for join
 
-				case 'segmentAdvanced': // Sent to ALL players when a new segment starts
-					setReceivedCanvasImage(data.canvasData); // The combined image from previous segment(s)
-					setCurrentSegmentIndex(data.currentSegmentIndex);
-					setMessage(data.message);
-					// *** CRITICAL: Reset drawing ability for ALL players when segment advances ***
-					setCanDrawOnCanvas(data.canDraw); // Should be true for the current drawer
-					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Should be false
-					setIsGameOver(false);
-					setFinalArtwork(null); // Clear final artwork if a new segment is starting (just in case)
+	// Canvas setup and drawing logic
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) return;
 
-					console.log(
-						`[WS Message - segmentAdvanced] currentSegmentIndex: ${data.currentSegmentIndex}, canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
-					);
+		const context = canvas.getContext('2d');
+		context.lineCap = 'round';
+		context.strokeStyle = 'black';
+		context.lineWidth = 5;
+		contextRef.current = context;
 
-					// Redraw the canvas with the received combined image
-					const canvasAdvanced = canvasRef.current;
-					const ctxAdvanced = contextRef.current;
-					if (canvasAdvanced && ctxAdvanced) {
-						clearCanvas(); // Always clear before drawing a new background
-						if (data.canvasData) {
-							const img = new Image();
-							img.onload = () => {
-								ctxAdvanced.drawImage(
-									img,
-									0,
-									0,
-									canvasAdvanced.width,
-									canvasAdvanced.height
-								);
-								console.log(
-									'[WS Message] Drawn received canvasData for advanced segment.'
-								);
-							};
-							img.onerror = (e) =>
-								console.error(
-									'Error loading received canvas image on segmentAdvanced:',
-									e
-								);
-							img.src = data.canvasData;
-						}
-					}
-					break;
+		// Clear canvas if it's the first segment and no image is received
+		// or if switching to the first segment
+		if (currentSegmentIndex === 0 && !receivedCanvasImage) {
+			context.clearRect(0, 0, canvas.width, canvas.height);
+		}
 
-				case 'gameOver':
-					setIsGameOver(true);
-					setMessage(data.message);
-					setFinalArtwork(data.finalArtwork); // Stores the final combined artwork
-					setCanDrawOnCanvas(false);
-					setIsWaitingForOtherPlayers(false);
-					setCurrentSegmentIndex(data.currentSegmentIndex); // Should be TOTAL_SEGMENTS
-					console.log('Game Over! Final artwork:', data.finalArtwork);
-					// Clear the drawing canvas when game is over
-					clearCanvas();
-					break;
+		// Draw the received image (peek or final artwork) onto the canvas
+		if (context && receivedCanvasImage) {
+			const img = new Image();
+			img.onload = () => {
+				context.clearRect(0, 0, canvas.width, canvas.height); // Clear existing before drawing new
+				context.drawImage(img, 0, 0, canvas.width, canvas.height);
+			};
+			img.onerror = (error) => {
+				console.error('Error loading received canvas image:', error);
+			};
+			img.src = receivedCanvasImage;
+		} else if (
+			context &&
+			!receivedCanvasImage &&
+			currentSegmentIndex === 0
+		) {
+			// Clear canvas if it's the first segment and no image is received
+			context.clearRect(0, 0, canvas.width, canvas.height);
+		}
+	}, [receivedCanvasImage, currentSegmentIndex]); // Depend on receivedCanvasImage
 
-				case 'error':
-					setMessage(`Error: ${data.message}`);
-					console.error('Server error:', data.message);
-					setCanDrawOnCanvas(false);
-					setIsWaitingForOtherPlayers(false);
-					if (
-						wsRef.current &&
-						wsRef.current.readyState === WebSocket.OPEN
-					) {
-						wsRef.current.close();
-					}
-					setGameRoomId(null); // Clear game room ID on error to prompt re-entry
-					setPlayerCount(0);
-					setCurrentSegmentIndex(0);
-					setIsGameOver(false);
-					setFinalArtwork(null);
-					clearCanvas();
-					console.log(
-						'[WS Message - error] Game state reset due to error.'
-					);
-					break;
+	const startDrawing = useCallback(
+		(e) => {
+			if (!canDrawOnCanvas || isGameOver) return; // Only allow drawing if permitted and not game over
+			const { offsetX, offsetY } = e.nativeEvent;
+			setIsDrawing(true);
+			setLastX(offsetX);
+			setLastY(offsetY);
+			contextRef.current.beginPath();
+			contextRef.current.moveTo(offsetX, offsetY);
+		},
+		[canDrawOnCanvas, isGameOver]
+	);
 
-				case 'clearCanvas': // Handle clear canvas from backend
-					clearCanvas();
-					setMessage(data.message);
-					console.log('[WS Message] Backend requested canvas clear.');
-					// After clear, if it's their turn, they should be able to draw
-					// (assuming clearCanvas is an action someone takes to restart current drawing)
-					setCanDrawOnCanvas(true); // Re-enable drawing
-					setIsWaitingForOtherPlayers(false); // No longer waiting
-					break;
-
-				default:
-					console.log(
-						'Unknown message type received:',
-						data.type,
-						data
-					);
-					break;
-			}
-		};
-
-		wsRef.current.onerror = (error) => {
-			console.error('WebSocket error:', error);
-			setMessage('WebSocket error. See console for details.');
-			setCanDrawOnCanvas(false);
-			setIsWaitingForOtherPlayers(false);
-			setGameRoomId(null); // Reset game state fully on connection error
-			setPlayerCount(0);
-			setIsGameOver(false);
-			setFinalArtwork(null);
-			clearCanvas();
-			console.log('[WS Error] Game state reset due to WebSocket error.');
-		};
-
-		wsRef.current.onclose = () => {
-			console.log('WebSocket disconnected.');
-			setMessage(
-				'Disconnected from server. Please refresh to try again.'
-			);
-			setCanDrawOnCanvas(false);
-			setIsWaitingForOtherPlayers(false);
-			setGameRoomId(null); // Reset game state fully on disconnect
-			setPlayerCount(0);
-			setIsGameOver(false);
-			setFinalArtwork(null);
-			clearCanvas();
-			console.log('[WS Close] Game state reset due to WebSocket close.');
-		};
-
-		// Cleanup on component unmount
-		return () => {
-			if (wsRef.current) {
-				wsRef.current.close();
-				console.log('[useEffect cleanup] WebSocket closed.');
-			}
-		};
-	}, [clearCanvas]); // clearCanvas is now a dependency
-
-	// --- Drawing Functions ---
 	const draw = useCallback(
 		(e) => {
-			// Only allow drawing if drawing is active AND we are allowed to draw on canvas
-			if (
-				!isDrawing ||
-				!canvasRef.current ||
-				!contextRef.current ||
-				!canDrawOnCanvas
-			) {
-				return;
-			}
-
-			const canvas = canvasRef.current;
-			const ctx = contextRef.current;
-			const rect = canvas.getBoundingClientRect();
-
-			// Handle both mouse and touch events
-			const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-			const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-
-			const currentX = clientX - rect.left;
-			const currentY = clientY - rect.top;
-
-			ctx.beginPath();
-			ctx.moveTo(lastX, lastY);
-			ctx.lineTo(currentX, currentY);
-			ctx.stroke();
-
-			setLastX(currentX);
-			setLastY(currentY);
+			if (!isDrawing || !canDrawOnCanvas || isGameOver) return;
+			const { offsetX, offsetY } = e.nativeEvent;
+			contextRef.current.lineTo(offsetX, offsetY);
+			contextRef.current.stroke();
+			setLastX(offsetX);
+			setLastY(offsetY);
 		},
-		[isDrawing, lastX, lastY, canDrawOnCanvas]
+		[isDrawing, canDrawOnCanvas, isGameOver]
 	);
 
-	const handleMouseDown = useCallback(
-		(e) => {
-			e.preventDefault();
-			console.log(
-				`[handleMouseDown] canDrawOnCanvas: ${canDrawOnCanvas}, canvasRef.current: ${!!canvasRef.current}, contextRef.current: ${!!contextRef.current}`
-			);
-
-			if (!canvasRef.current || !contextRef.current || !canDrawOnCanvas) {
-				console.log(
-					'[handleMouseDown] Drawing start aborted: conditions not met (canvas/context not ready or not permitted).'
-				);
-				return;
-			}
-
-			setIsDrawing(true);
-			const rect = canvasRef.current.getBoundingClientRect();
-			const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-			const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-			setLastX(clientX - rect.left);
-			setLastY(clientY - rect.top);
-			console.log(
-				`[handleMouseDown] Drawing started at (${
-					clientX - rect.left
-				}, ${clientY - rect.top}).`
-			);
-		},
-		[canDrawOnCanvas]
-	);
-
-	const handleMouseUp = useCallback(() => {
+	const stopDrawing = useCallback(() => {
+		if (!canDrawOnCanvas || isGameOver) return;
 		setIsDrawing(false);
-		console.log('[handleMouseUp] Drawing ended.');
-	}, []);
+		contextRef.current.closePath();
+	}, [canDrawOnCanvas, isGameOver]);
 
-	const handleMouseMove = useCallback(
-		(e) => {
-			e.preventDefault();
-			draw(e);
-		},
-		[draw]
-	);
-
-	// --- UI Interactions ---
-	const handleGameCodeChange = useCallback((e) => {
-		setGameCode(e.target.value.toUpperCase());
-		console.log(
-			`[handleGameCodeChange] Game code set to: ${e.target.value.toUpperCase()}`
-		);
-	}, []);
-
-	const joinOrCreateGame = useCallback(() => {
-		if (!gameCode) {
-			setMessage('Please enter a game code.');
-			console.warn('[joinOrCreateGame] No game code entered.');
+	const submitSegment = () => {
+		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+			setMessage('WebSocket not connected. Cannot submit.');
+			return;
+		}
+		if (!canDrawOnCanvas || isWaitingForOtherPlayers || isGameOver) {
+			setMessage('Cannot submit now.');
 			return;
 		}
 
-		const ws = wsRef.current;
-		if (ws && ws.readyState === WebSocket.OPEN) {
-			console.log(
-				`[joinOrCreateGame] Sending joinGame for gameCode: ${gameCode}`
-			);
-			ws.send(
-				JSON.stringify({
-					type: 'joinGame',
-					gameCode: gameCode,
-					nickname: `Player${Math.floor(Math.random() * 1000)}`,
-				})
-			);
-			setMessage(`Attempting to join/create game ${gameCode}...`);
-		} else {
-			console.error(
-				'[joinOrCreateGame] WebSocket not connected or ready. ReadyState:',
-				ws?.readyState
-			);
-			setMessage('WebSocket is not connected. Please wait or refresh.');
-		}
-	}, [gameCode]);
-
-	const submitSegment = useCallback(() => {
 		const canvas = canvasRef.current;
-		const ctx = contextRef.current;
+		if (!canvas) return;
 
-		console.log(`--- [submitSegment] Check conditions before sending ---`);
-		console.log(
-			`WS readyState: ${
-				wsRef.current?.readyState === WebSocket.OPEN
-					? 'OPEN'
-					: wsRef.current?.readyState
-			}`
-		);
-		console.log(`canvasRef.current: ${!!canvasRef.current}`);
-		console.log(`contextRef.current: ${!!contextRef.current}`);
-		console.log(`gameRoomId: ${gameRoomId}`);
-		console.log(`playerCount: ${playerCount}`);
-		console.log(
-			`currentSegmentIndex: ${currentSegmentIndex} (TOTAL_SEGMENTS: ${TOTAL_SEGMENTS})`
-		);
-		console.log(`canDrawOnCanvas: ${canDrawOnCanvas}`);
-		console.log(`isWaitingForOtherPlayers: ${isWaitingForOtherPlayers}`);
-		console.log(`-----------------------------------------------------`);
-
-		if (
-			!wsRef.current ||
-			wsRef.current.readyState !== WebSocket.OPEN ||
-			!canvas ||
-			!ctx ||
-			!gameRoomId
-		) {
-			setMessage(
-				'Not connected to the game server or canvas not ready. Please join a game.'
-			);
-			console.error(
-				'[submitSegment] Submission failed: Pre-conditions not met.'
-			);
-			return;
-		}
-
-		if (playerCount < 2) {
-			setMessage('Waiting for another player to join before submitting.');
-			console.warn(
-				'[submitSegment] Submission failed: Not enough players.'
-			);
-			return;
-		}
-		if (currentSegmentIndex >= TOTAL_SEGMENTS) {
-			setMessage('Game is already over!');
-			console.warn(
-				'[submitSegment] Submission failed: Game is already over.'
-			);
-			return;
-		}
-		// Only allow submission if currently able to draw and not already waiting
-		if (!canDrawOnCanvas || isWaitingForOtherPlayers) {
-			setMessage("It's not your turn to draw, or you already submitted.");
-			console.warn(
-				`[submitSegment] Submission failed: canDrawOnCanvas=${canDrawOnCanvas}, isWaitingForOtherPlayers=${isWaitingForOtherPlayers}`
-			);
-			return;
-		}
-
-		const canvasData = canvas.toDataURL('image/png');
+		const dataURL = canvas.toDataURL('image/png'); // Get current canvas content as data URL
 		wsRef.current.send(
 			JSON.stringify({
 				type: 'submitSegment',
 				gameRoomId: gameRoomId,
-				segmentIndex: currentSegmentIndex,
-				canvasData: canvasData,
+				canvasData: dataURL,
+				playerId: wsRef.current.id,
 			})
 		);
 		setMessage(
-			`Submitted ${segments[currentSegmentIndex]}! Waiting for other player to submit...`
+			`Submitting segment ${segments[currentSegmentIndex]}... Waiting for others.`
 		);
-		setCanDrawOnCanvas(false); // Disable drawing immediately after submitting
-		setIsWaitingForOtherPlayers(true); // Set state to waiting
-		console.log(
-			`[submitSegment] Segment ${segments[currentSegmentIndex]} submitted.`
-		);
-	}, [
-		gameRoomId,
-		playerCount,
-		currentSegmentIndex,
-		canDrawOnCanvas,
-		isWaitingForOtherPlayers,
-	]);
+		setCanDrawOnCanvas(false);
+		setIsWaitingForOtherPlayers(true);
+	};
 
-	// Diagnostic log for current render state
-	console.log(
-		`[RENDER CYCLE] gameRoomId: ${gameRoomId}, playerCount: ${playerCount}, currentSegmentIndex: ${currentSegmentIndex}, canDrawOnCanvas: ${canDrawOnCanvas}, isWaitingForOtherPlayers: ${isWaitingForOtherPlayers}, isGameOver: ${isGameOver}`
-	);
+	const createNewGame = async () => {
+		if (playerName.trim() === '') {
+			setMessage('Please enter your name before creating a game.');
+			return;
+		}
+		try {
+			const response = await axios.post(
+				'http://localhost:8080/api/createGame'
+			); // Make HTTP POST request
+			const { gameCode: newGameCode } = response.data;
+			setGeneratedGameCode(newGameCode); // Store the generated code
+			setGameCode(''); // Clear any manually entered code
+			setMessage(`Game created! Share this code: ${newGameCode}`);
+			setHasJoinedGame(true); // Indicate we are ready to join with the generated code
+		} catch (error) {
+			console.error('Error creating game:', error);
+			setMessage('Failed to create game. Please try again.');
+		}
+	};
+
+	const joinExistingGame = () => {
+		if (playerName.trim() === '') {
+			setMessage('Please enter your name before joining a game.');
+			return;
+		}
+		if (gameCode.trim() === '') {
+			setMessage('Please enter a game code to join.');
+			return;
+		}
+		setGeneratedGameCode(''); // Clear generated code if joining existing
+		setMessage(`Attempting to join game ${gameCode}...`);
+		setHasJoinedGame(true); // Indicate we are ready to join with the user-entered code
+	};
+
+	const clearCanvas = () => {
+		const canvas = canvasRef.current;
+		if (canvas) {
+			const context = canvas.getContext('2d');
+			context.clearRect(0, 0, canvas.width, canvas.height); // Clear the entire canvas
+			// If there's a peek image, re-draw it after clearing
+			if (receivedCanvasImage) {
+				const img = new Image();
+				img.onload = () => {
+					context.drawImage(img, 0, 0, canvas.width, canvas.height);
+				};
+				img.src = receivedCanvasImage;
+			}
+		}
+	};
 
 	return (
-		<div className="flex flex-col items-center p-5 bg-gray-100 min-h-screen font-inter">
-			<div className="max-w-4xl w-full bg-white p-6 rounded-lg shadow-xl border border-gray-200">
-				<h1 className="text-3xl font-bold text-center text-gray-800 mb-4">
-					Exquisite Corpse Game
-				</h1>
-				<p className="text-lg text-center text-gray-600 mb-4 font-semibold">
-					{message}
-				</p>
-				<p className="text-md text-center text-gray-700 mb-2">
-					Players: {playerCount}
-				</p>
+		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 p-8 flex flex-col items-center justify-center font-sans">
+			<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
+				Exquisite Corpse Game
+			</h1>
 
-				{/* Conditional rendering for join/create game input */}
-				{!gameRoomId && !isGameOver && (
-					<div className="flex justify-center mb-6">
+			{!hasJoinedGame ? (
+				// Initial screen: Join or Create
+				<div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6">
+					<h2 className="text-2xl font-semibold text-gray-800 mb-4">
+						Welcome!
+					</h2>
+					<input
+						type="text"
+						placeholder="Enter your Player Name"
+						value={playerName}
+						onChange={(e) => setPlayerName(e.target.value)}
+						className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-purple-500 focus:border-purple-500"
+						maxLength={20}
+					/>
+					<div className="space-y-4">
+						<button
+							onClick={createNewGame}
+							className="w-full bg-purple-600 text-white py-3 rounded-lg text-xl font-bold hover:bg-purple-700 transition-colors shadow-md"
+						>
+							Create New Game
+						</button>
+						<div className="relative flex items-center py-2">
+							<div className="flex-grow border-t border-gray-300"></div>
+							<span className="flex-shrink mx-4 text-gray-500 text-lg">
+								OR
+							</span>
+							<div className="flex-grow border-t border-gray-300"></div>
+						</div>
 						<input
 							type="text"
-							placeholder="Enter Game Code"
+							placeholder="Enter Game Code to Join"
 							value={gameCode}
-							onChange={handleGameCodeChange}
+							onChange={(e) =>
+								setGameCode(e.target.value.toUpperCase())
+							}
+							className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-purple-500 focus:border-purple-500 uppercase"
 							maxLength={6}
-							className="p-3 border border-gray-300 rounded-md mr-3 text-lg uppercase focus:ring-blue-500 focus:border-blue-500"
-							style={{ minWidth: '200px' }}
 						/>
 						<button
-							onClick={joinOrCreateGame}
-							className={`px-6 py-3 text-lg font-semibold rounded-md transition-colors duration-300
-                                ${
-									!gameCode ||
-									wsRef.current?.readyState !== WebSocket.OPEN
-										? 'bg-gray-400 cursor-not-allowed'
-										: 'bg-blue-600 hover:bg-blue-700 text-white shadow-md'
-								}`}
-							disabled={
-								!gameCode ||
-								wsRef.current?.readyState !== WebSocket.OPEN
-							}
+							onClick={joinExistingGame}
+							className="w-full bg-indigo-600 text-white py-3 rounded-lg text-xl font-bold hover:bg-indigo-700 transition-colors shadow-md"
 						>
-							Join/Create Game
+							Join Existing Game
 						</button>
 					</div>
-				)}
-
-				{/* Conditional rendering for waiting message */}
-				{gameRoomId && playerCount < 2 && !isGameOver && (
-					<p className="text-xl text-center text-blue-600 font-medium animate-pulse">
-						Waiting for another player to join game{' '}
-						<b>{gameCode}</b>...
+					<p className="text-red-500 text-md mt-4">{message}</p>
+				</div>
+			) : (
+				// Game screen once a game is joined/created
+				<div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl flex flex-col items-center space-y-6">
+					<p className="text-xl text-gray-700 font-medium">
+						{message}
 					</p>
-				)}
+					{gameRoomId && (
+						<p className="text-2xl font-bold text-purple-700">
+							Game Code: {generatedGameCode || gameCode}
+						</p>
+					)}
+					<p className="text-lg text-gray-600">
+						Players in room: {playerCount} / 2
+					</p>
 
-				{/* Canvas and Submit Button - Always render canvas, control interaction via state */}
-				<div
-					style={{
-						display:
-							gameRoomId && playerCount >= 2 && !isGameOver
-								? 'block'
-								: 'none',
-					}}
-				>
-					<h2 className="text-2xl font-bold text-center text-gray-800 mb-4">
-						Current Segment: {segments[currentSegmentIndex]}
-					</h2>
-					<canvas
-						ref={canvasRef}
-						width={800}
-						height={600}
-						className="border-2 border-gray-400 rounded-lg bg-white w-full max-w-full h-auto block mx-auto mb-6"
-						style={{
-							touchAction: 'none',
-							cursor: canDrawOnCanvas
-								? 'crosshair'
-								: 'not-allowed',
-							opacity: canDrawOnCanvas ? 1 : 0.6,
-						}}
-						onMouseDown={handleMouseDown}
-						onMouseUp={handleMouseUp}
-						onMouseLeave={handleMouseUp}
-						onMouseMove={handleMouseMove}
-						onTouchStart={handleMouseDown}
-						onTouchEnd={handleMouseUp}
-						onTouchCancel={handleMouseUp}
-						onTouchMove={handleMouseMove}
-					></canvas>
-					<div className="flex justify-center">
+					<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200">
+						<canvas
+							ref={canvasRef}
+							width={800}
+							height={600}
+							onMouseDown={startDrawing}
+							onMouseMove={draw}
+							onMouseUp={stopDrawing}
+							onMouseOut={stopDrawing}
+							className={`rounded-lg ${
+								canDrawOnCanvas
+									? 'cursor-crosshair'
+									: 'cursor-not-allowed'
+							}`}
+						></canvas>
+						{isGameOver && finalArtwork && (
+							<div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 rounded-lg">
+								<img
+									src={finalArtwork}
+									alt="Final Combined Artwork"
+									className="max-w-full max-h-full object-contain"
+								/>
+							</div>
+						)}
+					</div>
+
+					<div className="flex space-x-4 mt-4">
+						<button
+							onClick={clearCanvas}
+							className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+                                ${
+									canDrawOnCanvas && !isGameOver
+										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
+										: 'bg-gray-400 cursor-not-allowed shadow-inner'
+								}`}
+							disabled={!canDrawOnCanvas || isGameOver}
+						>
+							Clear Canvas
+						</button>
 						<button
 							onClick={submitSegment}
 							className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
                                 ${
-									isWaitingForOtherPlayers || !canDrawOnCanvas
+									isWaitingForOtherPlayers ||
+									!canDrawOnCanvas ||
+									isGameOver
 										? 'bg-gray-400 cursor-not-allowed shadow-inner'
 										: 'bg-green-600 text-white shadow-lg hover:bg-green-700'
 								}`}
 							disabled={
-								isWaitingForOtherPlayers || !canDrawOnCanvas
+								isWaitingForOtherPlayers ||
+								!canDrawOnCanvas ||
+								isGameOver
 							}
 						>
 							{isWaitingForOtherPlayers
@@ -625,33 +397,32 @@ export default function ExquisiteCorpseGame() {
 								: 'Submit Segment'}
 						</button>
 					</div>
-				</div>
 
-				{isGameOver && (
-					<div className="mt-8 text-center">
-						<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
-							Game Over!
-						</h2>
-						<p className="text-xl text-gray-700 mb-6">
-							The Exquisite Corpse is complete!
-						</p>
-						{finalArtwork && (
-							<img
-								src={finalArtwork}
-								alt="Final Combined Artwork"
-								className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl mx-auto block mb-8"
-							/>
-						)}
-						<button
-							onClick={() => window.location.reload()}
-							className="px-8 py-4 text-xl font-bold rounded-lg bg-indigo-600 text-white shadow-lg
-                                transition-all duration-300 ease-in-out transform hover:scale-105 hover:bg-indigo-700"
-						>
-							Start New Game
-						</button>
-					</div>
-				)}
-			</div>
+					{isGameOver && (
+						<div className="mt-8 text-center">
+							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
+								Game Over!
+							</h2>
+							<p className="text-xl text-gray-700 mb-6">
+								The Exquisite Corpse is complete!
+							</p>
+							{finalArtwork && (
+								<img
+									src={finalArtwork}
+									alt="Final Combined Artwork"
+									className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl mx-auto block mb-8"
+								/>
+							)}
+							<button
+								onClick={() => window.location.reload()}
+								className="px-8 py-4 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
+							>
+								Play Again
+							</button>
+						</div>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }
