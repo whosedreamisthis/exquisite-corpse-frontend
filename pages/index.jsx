@@ -33,18 +33,50 @@ export default function ExquisiteCorpseGame() {
 	const [isGameOver, setIsGameOver] = useState(false); // True when the game has ended
 	const [finalArtwork, setFinalArtwork] = useState(null); // Stores the final combined artwork from gameOver message
 
-	// --- Utility to clear canvas (Moved definition here) ---
+	// --- Utility to clear canvas ---
 	const clearCanvas = useCallback(() => {
 		const canvas = canvasRef.current;
 		if (canvas && contextRef.current) {
 			contextRef.current.clearRect(0, 0, canvas.width, canvas.height);
 			setReceivedCanvasImage(null); // Clear any background image
+			console.log(
+				'[clearCanvas] Canvas cleared and receivedCanvasImage reset.'
+			);
 		}
-	}, []); // This useCallback has no dependencies itself, so it's stable
+	}, []);
+
+	// --- Canvas Context Initialization (runs once on mount, as canvas is now always in DOM) ---
+	useEffect(() => {
+		const canvas = canvasRef.current;
+		if (!canvas) {
+			console.error(
+				'[useEffect Canvas Init] Canvas ref is null after initial render. This should not happen now.'
+			);
+			return;
+		}
+
+		const ctx = canvas.getContext('2d');
+		if (ctx) {
+			contextRef.current = ctx; // Store context in ref
+
+			ctx.lineCap = 'round';
+			ctx.strokeStyle = 'black';
+			ctx.lineWidth = 2;
+
+			ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas on initial load
+			console.log(
+				'[useEffect Canvas Init] Canvas context initialized and cleared.'
+			);
+		} else {
+			console.error(
+				'[useEffect Canvas Init] Could not get 2D context from canvas.'
+			);
+		}
+	}, []); // Empty dependency array because canvasRef.current is now always available from the start
 
 	// --- WebSocket Connection & Message Handling ---
 	useEffect(() => {
-		// Initialize WebSocket connection
+		console.log('[useEffect] Initializing WebSocket...');
 		wsRef.current = new WebSocket(WS_URL);
 
 		wsRef.current.onopen = () => {
@@ -52,14 +84,11 @@ export default function ExquisiteCorpseGame() {
 			setMessage(
 				'Connected to server. Enter a game code to join or create!'
 			);
-			// If already in a game (e.g., refreshing page and gameRoomId was persisted somehow, or you want to re-request state)
-			// For this version, we assume `gameRoomId` is lost on refresh and user needs to re-enter code.
-			// If the backend handles session restoration, this part would need more logic.
 		};
 
 		wsRef.current.onmessage = (event) => {
 			const data = JSON.parse(event.data);
-			console.log('Received from server:', data.type, data);
+			console.log('Received from server (full data):', data); // Log full data for inspection
 
 			switch (data.type) {
 				case 'playerJoined': // Broadcast when a player joins, or re-sent to all to update state
@@ -71,9 +100,13 @@ export default function ExquisiteCorpseGame() {
 					setIsGameOver(false); // Ensure not game over if it was before
 					setFinalArtwork(null); // Clear any previous final artwork
 
-					// *** CRITICAL: Set drawing ability based on server's instruction (using data.canDraw) ***
+					// These are the critical values to check from the backend
 					setCanDrawOnCanvas(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
+
+					console.log(
+						`[WS Message - ${data.type}] After setting states: gameRoomId=${data.gameRoomId}, canDraw=${data.canDraw}, isWaitingForOthers=${data.isWaitingForOthers}`
+					);
 
 					// Handle canvas display for the new segment
 					const canvas = canvasRef.current;
@@ -85,6 +118,9 @@ export default function ExquisiteCorpseGame() {
 						) {
 							ctx.clearRect(0, 0, canvas.width, canvas.height);
 							setReceivedCanvasImage(null); // Clear any previous image
+							console.log(
+								'[WS Message] Cleared canvas for new game/segment 0.'
+							);
 						} else if (data.canvasData) {
 							// Later segment or rejoining, draw the received image as background
 							const img = new Image();
@@ -102,6 +138,9 @@ export default function ExquisiteCorpseGame() {
 									canvas.width,
 									canvas.height
 								); // Draw combined previous
+								console.log(
+									'[WS Message] Drawn received canvasData onto canvas.'
+								);
 							};
 							img.onerror = (e) =>
 								console.error(
@@ -120,12 +159,18 @@ export default function ExquisiteCorpseGame() {
 					setCanDrawOnCanvas(data.canDraw); // Server will likely send false
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Server will likely send false
 					setIsGameOver(false);
+					console.log(
+						`[WS Message - playerDisconnected] playerCount: ${data.playerCount}, canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
+					);
 					// Optionally clear canvas or reset game if only one player remains, or if game becomes unplayable
 					if (data.playerCount < 2) {
-						clearCanvas(); // Now `clearCanvas` is defined
+						clearCanvas();
 						setGameRoomId(null); // Game effectively ended for this client
 						setMessage(
 							'Another player disconnected. Please create or join a new game.'
+						);
+						console.log(
+							'[WS Message - playerDisconnected] Game room ID cleared due to low players.'
 						);
 					}
 					break;
@@ -134,10 +179,16 @@ export default function ExquisiteCorpseGame() {
 					setMessage(data.message);
 					setCanDrawOnCanvas(data.canDraw); // Submitting player gets canDraw: false
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Submitting player gets isWaitingForOthers: true
+					console.log(
+						`[WS Message - submissionReceived] canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
+					);
 					break;
 
 				case 'playerSubmitted': // Sent to other players when one player submits
 					setMessage(data.message);
+					console.log(
+						`[WS Message - playerSubmitted] Message: ${data.message}`
+					);
 					// Their own canDraw/isWaitingForOthers state should not change by this message
 					break;
 
@@ -150,6 +201,10 @@ export default function ExquisiteCorpseGame() {
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers); // Should be false
 					setIsGameOver(false);
 					setFinalArtwork(null); // Clear final artwork if a new segment is starting (just in case)
+
+					console.log(
+						`[WS Message - segmentAdvanced] currentSegmentIndex: ${data.currentSegmentIndex}, canDraw: ${data.canDraw}, isWaitingForOthers: ${data.isWaitingForOthers}`
+					);
 
 					// Redraw the canvas with the received combined image
 					const canvasAdvanced = canvasRef.current;
@@ -171,6 +226,9 @@ export default function ExquisiteCorpseGame() {
 									canvasAdvanced.width,
 									canvasAdvanced.height
 								);
+								console.log(
+									'[WS Message] Drawn received canvasData for advanced segment.'
+								);
 							};
 							img.onerror = (e) =>
 								console.error(
@@ -191,7 +249,7 @@ export default function ExquisiteCorpseGame() {
 					setCurrentSegmentIndex(data.currentSegmentIndex); // Should be TOTAL_SEGMENTS
 					console.log('Game Over! Final artwork:', data.finalArtwork);
 					// Clear the drawing canvas when game is over
-					clearCanvas(); // Now `clearCanvas` is defined
+					clearCanvas();
 					break;
 
 				case 'error':
@@ -199,7 +257,6 @@ export default function ExquisiteCorpseGame() {
 					console.error('Server error:', data.message);
 					setCanDrawOnCanvas(false);
 					setIsWaitingForOtherPlayers(false);
-					// Importantly, on an error, consider disconnecting to allow user to retry
 					if (
 						wsRef.current &&
 						wsRef.current.readyState === WebSocket.OPEN
@@ -211,12 +268,16 @@ export default function ExquisiteCorpseGame() {
 					setCurrentSegmentIndex(0);
 					setIsGameOver(false);
 					setFinalArtwork(null);
-					clearCanvas(); // Now `clearCanvas` is defined
+					clearCanvas();
+					console.log(
+						'[WS Message - error] Game state reset due to error.'
+					);
 					break;
 
 				case 'clearCanvas': // Handle clear canvas from backend
-					clearCanvas(); // Now `clearCanvas` is defined
+					clearCanvas();
 					setMessage(data.message);
+					console.log('[WS Message] Backend requested canvas clear.');
 					break;
 
 				default:
@@ -238,7 +299,8 @@ export default function ExquisiteCorpseGame() {
 			setPlayerCount(0);
 			setIsGameOver(false);
 			setFinalArtwork(null);
-			clearCanvas(); // Now `clearCanvas` is defined
+			clearCanvas();
+			console.log('[WS Error] Game state reset due to WebSocket error.');
 		};
 
 		wsRef.current.onclose = () => {
@@ -252,34 +314,18 @@ export default function ExquisiteCorpseGame() {
 			setPlayerCount(0);
 			setIsGameOver(false);
 			setFinalArtwork(null);
-			clearCanvas(); // Now `clearCanvas` is defined
+			clearCanvas();
+			console.log('[WS Close] Game state reset due to WebSocket close.');
 		};
 
 		// Cleanup on component unmount
 		return () => {
 			if (wsRef.current) {
 				wsRef.current.close();
+				console.log('[useEffect cleanup] WebSocket closed.');
 			}
 		};
-	}, [clearCanvas]); // This useEffect correctly depends on clearCanvas now
-
-	// --- Canvas Context Initialization (runs once after canvasRef is set) ---
-	useEffect(() => {
-		const canvas = canvasRef.current;
-		if (!canvas) return;
-
-		const ctx = canvas.getContext('2d');
-		if (ctx) {
-			contextRef.current = ctx; // Store context in ref
-
-			ctx.lineCap = 'round';
-			ctx.strokeStyle = 'black';
-			ctx.lineWidth = 2;
-
-			// Clear canvas on initial load (only once)
-			ctx.clearRect(0, 0, canvas.width, canvas.height);
-		}
-	}, []); // Empty dependency array means this runs only once after initial render
+	}, [clearCanvas]);
 
 	// --- Drawing Functions ---
 	const draw = useCallback(
@@ -288,10 +334,11 @@ export default function ExquisiteCorpseGame() {
 			if (
 				!isDrawing ||
 				!canvasRef.current ||
-				!contextRef.current ||
+				!contextRef.current || // contextRef.current should now be reliably available
 				!canDrawOnCanvas
-			)
+			) {
 				return;
+			}
 
 			const canvas = canvasRef.current;
 			const ctx = contextRef.current; // Use context from ref
@@ -318,8 +365,19 @@ export default function ExquisiteCorpseGame() {
 	const handleMouseDown = useCallback(
 		(e) => {
 			e.preventDefault(); // Prevent scrolling on touch devices
+			// Diagnostic log for debugging drawing start
+			console.log(
+				`[handleMouseDown] canDrawOnCanvas: ${canDrawOnCanvas}, canvasRef.current: ${!!canvasRef.current}, contextRef.current: ${!!contextRef.current}`
+			);
+
 			// Only allow drawing if in drawing phase
-			if (!canvasRef.current || !canDrawOnCanvas) return;
+			if (!canvasRef.current || !contextRef.current || !canDrawOnCanvas) {
+				// contextRef.current should now be reliably available
+				console.log(
+					'[handleMouseDown] Drawing start aborted: conditions not met (canvas/context not ready or not permitted).'
+				);
+				return;
+			}
 
 			setIsDrawing(true);
 			const rect = canvasRef.current.getBoundingClientRect();
@@ -328,12 +386,18 @@ export default function ExquisiteCorpseGame() {
 
 			setLastX(clientX - rect.left);
 			setLastY(clientY - rect.top);
+			console.log(
+				`[handleMouseDown] Drawing started at (${
+					clientX - rect.left
+				}, ${clientY - rect.top}).`
+			);
 		},
 		[canDrawOnCanvas] // Depend on canDrawOnCanvas
 	);
 
 	const handleMouseUp = useCallback(() => {
 		setIsDrawing(false);
+		console.log('[handleMouseUp] Drawing ended.');
 	}, []);
 
 	const handleMouseMove = useCallback(
@@ -347,17 +411,24 @@ export default function ExquisiteCorpseGame() {
 	// --- UI Interactions ---
 	const handleGameCodeChange = useCallback((e) => {
 		setGameCode(e.target.value.toUpperCase());
+		console.log(
+			`[handleGameCodeChange] Game code set to: ${e.target.value.toUpperCase()}`
+		);
 	}, []);
 
 	const joinOrCreateGame = useCallback(() => {
 		if (!gameCode) {
 			setMessage('Please enter a game code.');
+			console.warn('[joinOrCreateGame] No game code entered.');
 			return;
 		}
 
 		const ws = wsRef.current;
 		// Check if connection is open before sending
 		if (ws && ws.readyState === WebSocket.OPEN) {
+			console.log(
+				`[joinOrCreateGame] Sending joinGame for gameCode: ${gameCode}`
+			);
 			ws.send(
 				JSON.stringify({
 					type: 'joinGame',
@@ -367,6 +438,10 @@ export default function ExquisiteCorpseGame() {
 			);
 			setMessage(`Attempting to join/create game ${gameCode}...`);
 		} else {
+			console.error(
+				'[joinOrCreateGame] WebSocket not connected or ready. ReadyState:',
+				ws?.readyState
+			);
 			setMessage('WebSocket is not connected. Please wait or refresh.');
 		}
 	}, [gameCode]);
@@ -375,30 +450,62 @@ export default function ExquisiteCorpseGame() {
 		const canvas = canvasRef.current;
 		const ctx = contextRef.current;
 
+		// Diagnostic log: ALL conditions for submission
+		console.log(`--- [submitSegment] Check conditions before sending ---`);
+		console.log(
+			`WS readyState: ${
+				wsRef.current?.readyState === WebSocket.OPEN
+					? 'OPEN'
+					: wsRef.current?.readyState
+			}`
+		);
+		console.log(`canvasRef.current: ${!!canvasRef.current}`);
+		console.log(`contextRef.current: ${!!contextRef.current}`); // Should be true now
+		console.log(`gameRoomId: ${gameRoomId}`);
+		console.log(`playerCount: ${playerCount}`);
+		console.log(
+			`currentSegmentIndex: ${currentSegmentIndex} (TOTAL_SEGMENTS: ${TOTAL_SEGMENTS})`
+		);
+		console.log(`canDrawOnCanvas: ${canDrawOnCanvas}`);
+		console.log(`isWaitingForOtherPlayers: ${isWaitingForOtherPlayers}`);
+		console.log(`-----------------------------------------------------`);
+
 		if (
 			!wsRef.current ||
 			wsRef.current.readyState !== WebSocket.OPEN ||
 			!canvas ||
-			!ctx ||
+			!ctx || // Now 'ctx' should be reliably available
 			!gameRoomId // Ensure gameRoomId is set from the WebSocket connection
 		) {
 			setMessage(
 				'Not connected to the game server or canvas not ready. Please join a game.'
+			);
+			console.error(
+				'[submitSegment] Submission failed: Pre-conditions not met.'
 			);
 			return;
 		}
 
 		if (playerCount < 2) {
 			setMessage('Waiting for another player to join before submitting.');
+			console.warn(
+				'[submitSegment] Submission failed: Not enough players.'
+			);
 			return;
 		}
 		if (currentSegmentIndex >= TOTAL_SEGMENTS) {
 			setMessage('Game is already over!');
+			console.warn(
+				'[submitSegment] Submission failed: Game is already over.'
+			);
 			return;
 		}
 		// Only allow submission if currently able to draw and not already waiting
 		if (!canDrawOnCanvas || isWaitingForOtherPlayers) {
 			setMessage("It's not your turn to draw, or you already submitted.");
+			console.warn(
+				`[submitSegment] Submission failed: canDrawOnCanvas=${canDrawOnCanvas}, isWaitingForOtherPlayers=${isWaitingForOtherPlayers}`
+			);
 			return;
 		}
 
@@ -416,6 +523,9 @@ export default function ExquisiteCorpseGame() {
 		);
 		setCanDrawOnCanvas(false); // Disable drawing immediately after submitting
 		setIsWaitingForOtherPlayers(true); // Set state to waiting
+		console.log(
+			`[submitSegment] Segment ${segments[currentSegmentIndex]} submitted.`
+		);
 	}, [
 		gameRoomId,
 		playerCount,
@@ -423,6 +533,11 @@ export default function ExquisiteCorpseGame() {
 		canDrawOnCanvas,
 		isWaitingForOtherPlayers,
 	]);
+
+	// Diagnostic log for current render state
+	console.log(
+		`[RENDER CYCLE] gameRoomId: ${gameRoomId}, playerCount: ${playerCount}, currentSegmentIndex: ${currentSegmentIndex}, canDrawOnCanvas: ${canDrawOnCanvas}, isWaitingForOtherPlayers: ${isWaitingForOtherPlayers}, isGameOver: ${isGameOver}`
+	);
 
 	return (
 		<div className="flex flex-col items-center p-5 bg-gray-100 min-h-screen font-inter">
@@ -437,6 +552,7 @@ export default function ExquisiteCorpseGame() {
 					Players: {playerCount}
 				</p>
 
+				{/* Conditional rendering for join/create game input */}
 				{!gameRoomId && !isGameOver && (
 					<div className="flex justify-center mb-6">
 						<input
@@ -467,6 +583,7 @@ export default function ExquisiteCorpseGame() {
 					</div>
 				)}
 
+				{/* Conditional rendering for waiting message */}
 				{gameRoomId && playerCount < 2 && !isGameOver && (
 					<p className="text-xl text-center text-blue-600 font-medium animate-pulse">
 						Waiting for another player to join game{' '}
@@ -474,53 +591,58 @@ export default function ExquisiteCorpseGame() {
 					</p>
 				)}
 
-				{gameRoomId && playerCount >= 2 && !isGameOver && (
-					<>
-						<h2 className="text-2xl font-bold text-center text-gray-800 mb-4">
-							Current Segment: {segments[currentSegmentIndex]}
-						</h2>
-						<canvas
-							ref={canvasRef}
-							width={800}
-							height={600}
-							className="border-2 border-gray-400 rounded-lg bg-white w-full max-w-full h-auto block mx-auto mb-6"
-							style={{
-								touchAction: 'none', // Disable default touch actions for drawing
-								cursor: canDrawOnCanvas
-									? 'crosshair'
-									: 'not-allowed',
-								opacity: canDrawOnCanvas ? 1 : 0.6,
-							}}
-							onMouseDown={handleMouseDown}
-							onMouseUp={handleMouseUp}
-							onMouseLeave={handleMouseUp}
-							onMouseMove={handleMouseMove}
-							onTouchStart={handleMouseDown}
-							onTouchEnd={handleMouseUp}
-							onTouchCancel={handleMouseUp}
-							onTouchMove={handleMouseMove}
-						></canvas>
-						<div className="flex justify-center">
-							<button
-								onClick={submitSegment}
-								className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
-                                    ${
-										isWaitingForOtherPlayers ||
-										!canDrawOnCanvas
-											? 'bg-gray-400 cursor-not-allowed shadow-inner'
-											: 'bg-green-600 text-white shadow-lg hover:bg-green-700'
-									}`}
-								disabled={
+				{/* Canvas and Submit Button - Always render canvas, control interaction via state */}
+				<div
+					style={{
+						display:
+							gameRoomId && playerCount >= 2 && !isGameOver
+								? 'block'
+								: 'none',
+					}}
+				>
+					<h2 className="text-2xl font-bold text-center text-gray-800 mb-4">
+						Current Segment: {segments[currentSegmentIndex]}
+					</h2>
+					<canvas
+						ref={canvasRef}
+						width={800}
+						height={600}
+						className="border-2 border-gray-400 rounded-lg bg-white w-full max-w-full h-auto block mx-auto mb-6"
+						style={{
+							touchAction: 'none', // Disable default touch actions for drawing
+							cursor: canDrawOnCanvas
+								? 'crosshair'
+								: 'not-allowed',
+							opacity: canDrawOnCanvas ? 1 : 0.6,
+						}}
+						onMouseDown={handleMouseDown}
+						onMouseUp={handleMouseUp}
+						onMouseLeave={handleMouseUp}
+						onMouseMove={handleMouseMove}
+						onTouchStart={handleMouseDown}
+						onTouchEnd={handleMouseUp}
+						onTouchCancel={handleMouseUp}
+						onTouchMove={handleMouseMove}
+					></canvas>
+					<div className="flex justify-center">
+						<button
+							onClick={submitSegment}
+							className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+                                ${
 									isWaitingForOtherPlayers || !canDrawOnCanvas
-								}
-							>
-								{isWaitingForOtherPlayers
-									? 'Waiting for Others...'
-									: 'Submit Segment'}
-							</button>
-						</div>
-					</>
-				)}
+										? 'bg-gray-400 cursor-not-allowed shadow-inner'
+										: 'bg-green-600 text-white shadow-lg hover:bg-green-700'
+								}`}
+							disabled={
+								isWaitingForOtherPlayers || !canDrawOnCanvas
+							}
+						>
+							{isWaitingForOtherPlayers
+								? 'Waiting for Others...'
+								: 'Submit Segment'}
+						</button>
+					</div>
+				</div>
 
 				{isGameOver && (
 					<div className="mt-8 text-center">
