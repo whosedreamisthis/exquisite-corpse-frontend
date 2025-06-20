@@ -376,52 +376,59 @@ export default function ExquisiteCorpseGame() {
 					<p className="text-xl text-gray-700 font-medium">
 						{message}
 					</p>
-					{gameRoomId && (
-						<p className="text-2xl font-bold text-purple-700">
-							Game Code: {generatedGameCode || gameCode}
+					{gameRoomId &&
+						!isGameOver && ( // Only show game code when not game over
+							<p className="text-2xl font-bold text-purple-700">
+								Game Code: {generatedGameCode || gameCode}
+							</p>
+						)}
+					{!isGameOver && ( // Only show player count when not game over
+						<p className="text-lg text-gray-600">
+							Players in room: {playerCount} / 2
 						</p>
 					)}
-					<p className="text-lg text-gray-600">
-						Players in room: {playerCount} / 2
-					</p>
-					{/* Display the current segment name */}
-					<p className="text-xl font-semibold text-gray-800">
-						Drawing: {currentSegment}
-					</p>
+					{/* Only show current segment when not game over */}
+					{!isGameOver && (
+						<p className="text-xl font-semibold text-gray-800">
+							Drawing: {currentSegment}
+						</p>
+					)}
 
-					<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200">
-						<canvas
-							ref={canvasRef}
-							width={800}
-							height={600}
-							onMouseDown={startDrawing}
-							onMouseMove={draw}
-							onMouseUp={stopDrawing}
-							onMouseOut={stopDrawing}
-							className={`rounded-lg ${
-								canDrawOnCanvas
-									? 'cursor-crosshair'
-									: 'cursor-not-allowed'
-							}`}
-						></canvas>
-					</div>
+					{!isGameOver && ( // Conditional rendering for the main canvas and its controls
+						<>
+							<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200">
+								<canvas
+									ref={canvasRef}
+									width={800}
+									height={600}
+									onMouseDown={startDrawing}
+									onMouseMove={draw}
+									onMouseUp={stopDrawing}
+									onMouseOut={stopDrawing}
+									className={`rounded-lg ${
+										canDrawOnCanvas
+											? 'cursor-crosshair'
+											: 'cursor-not-allowed'
+									}`}
+								></canvas>
+							</div>
 
-					<div className="flex space-x-4 mt-4">
-						<button
-							onClick={clearCanvas}
-							className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+							<div className="flex space-x-4 mt-4">
+								<button
+									onClick={clearCanvas}
+									className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
                                 ${
 									canDrawOnCanvas && !isGameOver
 										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
 										: 'bg-gray-400 cursor-not-allowed shadow-inner'
 								}`}
-							disabled={!canDrawOnCanvas || isGameOver}
-						>
-							Clear Canvas
-						</button>
-						<button
-							onClick={submitSegment}
-							className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+									disabled={!canDrawOnCanvas || isGameOver}
+								>
+									Clear Canvas
+								</button>
+								<button
+									onClick={submitSegment}
+									className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
                                 ${
 									isWaitingForOtherPlayers ||
 									!canDrawOnCanvas ||
@@ -429,17 +436,19 @@ export default function ExquisiteCorpseGame() {
 										? 'bg-gray-400 cursor-not-allowed shadow-inner'
 										: 'bg-green-600 text-white shadow-lg hover:bg-green-700'
 								}`}
-							disabled={
-								isWaitingForOtherPlayers ||
-								!canDrawOnCanvas ||
-								isGameOver
-							}
-						>
-							{isWaitingForOtherPlayers
-								? 'Waiting for Others...'
-								: 'Submit Segment'}
-						</button>
-					</div>
+									disabled={
+										isWaitingForOtherPlayers ||
+										!canDrawOnCanvas ||
+										isGameOver
+									}
+								>
+									{isWaitingForOtherPlayers
+										? 'Waiting for Others...'
+										: 'Submit Segment'}
+								</button>
+							</div>
+						</>
+					)}
 
 					{isGameOver && (
 						<div className="mt-8 text-center">
@@ -449,20 +458,22 @@ export default function ExquisiteCorpseGame() {
 							<p className="text-xl text-gray-700 mb-6">
 								The Exquisite Corpse is complete!
 							</p>
-							{/* Display both final artworks separately with their original styling, within a flex container */}
-							<div className="flex justify-center space-x-4 mb-8">
+							{/* Display both final artworks one below the other */}
+							<div className="flex flex-col items-center space-y-8 mb-8">
+								{' '}
+								{/* Changed to flex-col and space-y */}
 								{finalArtwork && (
 									<img
 										src={finalArtwork}
 										alt="Final Combined Artwork 1"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl mx-auto block"
+										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block" // Removed mx-auto for flex-col centering
 									/>
 								)}
 								{finalArtwork2 && (
 									<img
 										src={finalArtwork2}
 										alt="Final Combined Artwork 2"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl mx-auto block"
+										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block" // Removed mx-auto for flex-col centering
 									/>
 								)}
 							</div>
