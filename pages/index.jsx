@@ -41,44 +41,8 @@ export default function ExquisiteCorpseGame() {
 	const [finalArtwork2, setFinalArtwork2] = useState(null);
 	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
 	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
-	const [socket, setSocket] = useState(null);
-	useEffect(() => {
-		const newSocket = new WebSocket('ws://localhost:8080'); // Update this if you're hosting elsewhere
-		setSocket(newSocket);
+	// Removed the `socket` state as it's redundant
 
-		newSocket.onmessage = async (event) => {
-			const data = JSON.parse(event.data);
-
-			if (data.type === 'gameStateUpdate') {
-				setMessage(data.message);
-				setPlayerCount(data.playerCount || 1);
-				setCurrentSegment(segments[data.currentSegmentIndex] || 'Head');
-				setCanDrawOnCanvas(data.canDraw);
-				setIsWaitingForOtherPlayers(data.isWaitingForOthers);
-				setIsGameOver(data.status === 'completed');
-
-				if (data.canvasData && canvasRef.current) {
-					const image = new Image();
-					image.onload = () => {
-						const ctx = canvasRef.current.getContext('2d');
-						ctx.clearRect(0, 0, 800, 600);
-						ctx.drawImage(image, 0, 0);
-					};
-					image.src = data.canvasData;
-				}
-
-				if (data.finalArtwork1) setFinalArtwork(data.finalArtwork1);
-				if (data.finalArtwork2) setFinalArtwork2(data.finalArtwork2);
-			}
-
-			if (data.type === 'playerDisconnected') {
-				setMessage(data.message);
-				setPlayerCount(data.playerCount);
-			}
-		};
-
-		return () => newSocket.close();
-	}, []);
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		// Only connect if we haven't already and are about to join a game
@@ -127,14 +91,35 @@ export default function ExquisiteCorpseGame() {
 
 				if (data.canvasData) {
 					setReceivedCanvasImage(data.canvasData);
+					// Draw the received image (peek or current canvas) onto the canvas
+					if (canvasRef.current) {
+						const image = new Image();
+						image.onload = () => {
+							const ctx = canvasRef.current.getContext('2d');
+							ctx.clearRect(0, 0, 800, 600); // Clear before drawing new
+							ctx.drawImage(image, 0, 0);
+						};
+						image.onerror = (error) => {
+							console.error(
+								'Error loading received canvas image:',
+								error
+							);
+						};
+						image.src = data.canvasData;
+					}
 				} else {
 					setReceivedCanvasImage(null); // Clear if no canvas data
+					// If no canvasData and not game over, clear the canvas
+					if (canvasRef.current && data.status !== 'completed') {
+						const ctx = canvasRef.current.getContext('2d');
+						ctx.clearRect(0, 0, 800, 600);
+					}
 				}
 
-				if (data.type === 'gameOver') {
+				if (data.status === 'completed') {
 					setIsGameOver(true);
-					setFinalArtwork(data.finalArtwork);
-					// Set the second final artwork if provided by the server
+					// Ensure finalArtwork1 and finalArtwork2 are correctly set
+					setFinalArtwork(data.finalArtwork1 || null); // Changed to data.finalArtwork1
 					setFinalArtwork2(data.finalArtwork2 || null);
 					setCanDrawOnCanvas(false);
 				} else if (data.type === 'playerDisconnected') {
@@ -148,15 +133,12 @@ export default function ExquisiteCorpseGame() {
 					data.type === 'initialState' ||
 					data.type === 'gameStarted'
 				) {
-					// These state updates are fine as they don't trigger the WebSocket useEffect again,
-					// because the relevant variables are no longer in its dependency array.
 					setGameCode(data.gameCode || gameCode); // Use received code, fallback to existing
 					setGeneratedGameCode(data.gameCode || generatedGameCode); // Use received code, fallback to existing
 					setCanDrawOnCanvas(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
 					setReceivedCanvasImage(data.canvasData);
-					setFinalArtwork(data.finalArtwork || null);
-					// Also update finalArtwork2 on initial state if available
+					setFinalArtwork(data.finalArtwork1 || null); // Changed to data.finalArtwork1
 					setFinalArtwork2(data.finalArtwork2 || null);
 					if (data.status === 'completed') {
 						setIsGameOver(true);
@@ -198,7 +180,7 @@ export default function ExquisiteCorpseGame() {
 		// This ensures the WebSocket connection logic only runs when we explicitly intend to connect.
 	}, [hasJoinedGame]);
 
-	// Canvas setup and drawing logic (remains mostly the same)
+	// Canvas setup and drawing logic (remains mostly the same, now draws from receivedCanvasImage)
 	useEffect(() => {
 		const canvas = canvasRef.current;
 		if (!canvas) return;
@@ -209,29 +191,9 @@ export default function ExquisiteCorpseGame() {
 		context.lineWidth = 5;
 		contextRef.current = context;
 
-		// Clear canvas if it's the first segment and no image is received
-		// or if switching to the first segment
-		if (currentSegmentIndex === 0 && !receivedCanvasImage) {
-			context.clearRect(0, 0, canvas.width, canvas.height);
-		}
-
-		// Draw the received image (peek or final artwork) onto the canvas
-		if (context && receivedCanvasImage) {
-			const img = new Image();
-			img.onload = () => {
-				context.clearRect(0, 0, canvas.width, canvas.height); // Clear existing before drawing new
-				context.drawImage(img, 0, 0, canvas.width, canvas.height);
-			};
-			img.onerror = (error) => {
-				console.error('Error loading received canvas image:', error);
-			};
-			img.src = receivedCanvasImage;
-		} else if (
-			context &&
-			!receivedCanvasImage &&
-			currentSegmentIndex === 0
-		) {
-			// Clear canvas if it's the first segment and no image is received
+		// The drawing of receivedCanvasImage is now primarily handled in the ws.onmessage handler.
+		// This useEffect can ensure the canvas is cleared initially or if image becomes null.
+		if (!receivedCanvasImage && currentSegmentIndex === 0) {
 			context.clearRect(0, 0, canvas.width, canvas.height);
 		}
 	}, [canvasRef.current, receivedCanvasImage, currentSegmentIndex]);
@@ -442,27 +404,6 @@ export default function ExquisiteCorpseGame() {
 									: 'cursor-not-allowed'
 							}`}
 						></canvas>
-						{isGameOver && finalArtwork && (
-							// Use a flex container to display both artworks side-by-side
-							<div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-75 rounded-lg">
-								<div className="flex space-x-4">
-									{' '}
-									{/* Added a flex container for the images */}
-									<img
-										src={finalArtwork}
-										alt="Final Combined Artwork 1"
-										className="max-w-full max-h-full object-contain"
-									/>
-									{finalArtwork2 && ( // Conditionally render the second artwork
-										<img
-											src={finalArtwork2}
-											alt="Final Combined Artwork 2"
-											className="max-w-full max-h-full object-contain"
-										/>
-									)}
-								</div>
-							</div>
-						)}
 					</div>
 
 					<div className="flex space-x-4 mt-4">
