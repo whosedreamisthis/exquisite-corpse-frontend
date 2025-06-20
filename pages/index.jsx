@@ -119,7 +119,7 @@ export default function ExquisiteCorpseGame() {
 				if (data.status === 'completed') {
 					setIsGameOver(true);
 					// Ensure finalArtwork1 and finalArtwork2 are correctly set
-					setFinalArtwork(data.finalArtwork1 || null); // Changed to data.finalArtwork1
+					setFinalArtwork(data.finalArtwork1 || null);
 					setFinalArtwork2(data.finalArtwork2 || null);
 					setCanDrawOnCanvas(false);
 				} else if (data.type === 'playerDisconnected') {
@@ -138,7 +138,7 @@ export default function ExquisiteCorpseGame() {
 					setCanDrawOnCanvas(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
 					setReceivedCanvasImage(data.canvasData);
-					setFinalArtwork(data.finalArtwork1 || null); // Changed to data.finalArtwork1
+					setFinalArtwork(data.finalArtwork1 || null);
 					setFinalArtwork2(data.finalArtwork2 || null);
 					if (data.status === 'completed') {
 						setIsGameOver(true);
@@ -150,10 +150,11 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onclose = () => {
 				console.log('WebSocket disconnected.');
+				// Set hasJoinedGame to false to return to the initial screen on disconnect
 				setMessage(
-					'Disconnected from game. Please refresh to rejoin or create a new game.'
+					'Disconnected from game. Please create or rejoin a game.'
 				);
-				setHasJoinedGame(false); // Go back to initial screen
+				setHasJoinedGame(false); // Go back to initial screen on disconnect
 				setCurrentPlayersWsId(null); // Clear player ID on disconnect
 				wsRef.current = null; // CRITICAL: Clear the ref so a new connection can be attempted next time
 			};
@@ -162,6 +163,7 @@ export default function ExquisiteCorpseGame() {
 				console.error('WebSocket error:', error);
 				setMessage('WebSocket error. Check console for details.');
 				wsRef.current = null; // Clear ref on error too
+				setHasJoinedGame(false); // Go back to initial screen on error
 			};
 
 			// Cleanup function: This runs when the component unmounts or before the effect re-runs
@@ -315,6 +317,40 @@ export default function ExquisiteCorpseGame() {
 				img.src = receivedCanvasImage;
 			}
 		}
+	};
+
+	// New function to handle "Play Again" by returning to the initial screen
+	const handlePlayAgain = () => {
+		// 1. Close existing WebSocket connection if open
+		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+			wsRef.current.close();
+		}
+		wsRef.current = null; // Ensure the ref is cleared immediately
+
+		// 2. Reset all game-specific states to their initial, pre-joined game values
+		// PlayerName is intentionally kept to avoid re-typing
+		setIsDrawing(false);
+		setLastX(0);
+		setLastY(0);
+		setGameCode('');
+		setGeneratedGameCode('');
+		setGameRoomId(null);
+		setMessage(
+			'Your game ended. Enter a game code to join or create a new one!'
+		);
+		setPlayerCount(0);
+		setCurrentSegmentIndex(0);
+		setCurrentSegment(segments[0]); // Reset to 'Head'
+		setCanDrawOnCanvas(false);
+		setIsWaitingForOtherPlayers(false);
+		setReceivedCanvasImage(null);
+		setIsGameOver(false);
+		setFinalArtwork(null);
+		setFinalArtwork2(null);
+		setCurrentPlayersWsId(null);
+
+		// 3. Set hasJoinedGame to false to render the initial game screen
+		setHasJoinedGame(false);
 	};
 
 	return (
@@ -478,7 +514,7 @@ export default function ExquisiteCorpseGame() {
 								)}
 							</div>
 							<button
-								onClick={() => window.location.reload()}
+								onClick={handlePlayAgain} // Changed to call handlePlayAgain
 								className="px-8 py-4 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
 							>
 								Play Again
