@@ -491,9 +491,10 @@ export default function ExquisiteCorpseGame() {
 							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
 								Game Over!
 							</h2>
-							<p className="text-xl text-gray-700 mb-6">
-								The Exquisite Corpse is complete!
-							</p>
+							{/* This line was causing duplication and has been removed */}
+							{/* <p className="text-xl text-gray-700 mb-6">
+                                The Exquisite Corpse is complete!
+                            </p> */}
 							{/* Display both final artworks one below the other */}
 							<div className="flex flex-col items-center space-y-8 mb-8">
 								{' '}
