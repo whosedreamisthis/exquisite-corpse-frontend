@@ -6,9 +6,10 @@ import axios from 'axios'; // Import axios for HTTP requests
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
 const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
 
-// Define total segments here, matching your backend
+// Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
+const SEGMENT_HEIGHT = 600 / TOTAL_SEGMENTS; // Calculate the height of each segment
 
 export default function ExquisiteCorpseGame() {
 	const canvasRef = useRef(null);
@@ -29,7 +30,9 @@ export default function ExquisiteCorpseGame() {
 	const [playerCount, setPlayerCount] = useState(0); // Tracks how many players are in the room
 	const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0); // Which part is being drawn (0-Head, 1-Torso, etc.)
 	// Added state to hold the current segment name (e.g., 'Head', 'Torso')
-	const [currentSegment, setCurrentSegment] = useState(segments[0]);
+	const [currentSegment, setCurrentSegment] = useState(
+		segments[(currentSegmentIndex + 1) % TOTAL_SEGMENTS]
+	); // Show next segment
 	const [canDrawOnCanvas, setCanDrawOnCanvas] = useState(false); // Whether the current player can draw
 	const [isWaitingForOtherPlayers, setIsWaitingForOtherPlayers] =
 		useState(false); // Whether current player submitted and is waiting
@@ -41,12 +44,10 @@ export default function ExquisiteCorpseGame() {
 	const [finalArtwork2, setFinalArtwork2] = useState(null);
 	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
 	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
-	// Removed the `socket` state as it's redundant
 
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		// Only connect if we haven't already and are about to join a game
-		// CRITICAL: Ensure wsRef.current is null to prevent re-connections
 		if (hasJoinedGame && !wsRef.current) {
 			console.log('Attempting to establish WebSocket connection...');
 			const ws = new WebSocket(WS_URL);
@@ -59,7 +60,6 @@ export default function ExquisiteCorpseGame() {
 			ws.onopen = () => {
 				console.log('WebSocket connected. Sending joinGame message...');
 				// After connection, send the joinGame message with the correct code
-				// playerId is sent as null initially; the server will assign and send it back.
 				ws.send(
 					JSON.stringify({
 						type: 'joinGame',
@@ -78,13 +78,14 @@ export default function ExquisiteCorpseGame() {
 				setPlayerCount(data.playerCount || 0);
 				setCurrentSegmentIndex(data.currentSegmentIndex || 0);
 				// Update the current segment name based on the index
-				setCurrentSegment(segments[data.currentSegmentIndex || 0]);
+				setCurrentSegment(
+					segments[(data.currentSegmentIndex + 1) % TOTAL_SEGMENTS]
+				); // Show next segment
 				setCanDrawOnCanvas(data.canDraw || false);
 				setIsWaitingForOtherPlayers(data.isWaitingForOthers || false);
 				setGameRoomId(data.gameRoomId || null);
 
 				// Set the current player's WebSocket ID if received from the server
-				// Only update if the ID is provided and different from current state
 				if (data.playerId && data.playerId !== currentPlayersWsId) {
 					setCurrentPlayersWsId(data.playerId);
 				}
@@ -178,8 +179,7 @@ export default function ExquisiteCorpseGame() {
 				wsRef.current = null; // Ensure the ref is cleared
 			};
 		}
-		// CRITICAL CHANGE: The dependency array now only includes `hasJoinedGame`.
-		// This ensures the WebSocket connection logic only runs when we explicitly intend to connect.
+		// The dependency array now only includes `hasJoinedGame`.
 	}, [hasJoinedGame]);
 
 	// Canvas setup and drawing logic (remains mostly the same, now draws from receivedCanvasImage)
@@ -211,7 +211,7 @@ export default function ExquisiteCorpseGame() {
 			contextRef.current.beginPath();
 			contextRef.current.moveTo(offsetX, offsetY);
 		},
-		[canDrawOnCanvas, isGameOver]
+		[{ canDrawOnCanvas, isGameOver }]
 	);
 
 	const draw = useCallback(
@@ -230,7 +230,7 @@ export default function ExquisiteCorpseGame() {
 			setLastX(offsetX);
 			setLastY(offsetY);
 		},
-		[isDrawing, canDrawOnCanvas, isGameOver]
+		[{ isDrawing, canDrawOnCanvas, isGameOver }]
 	);
 
 	const stopDrawing = useCallback(() => {
@@ -238,7 +238,7 @@ export default function ExquisiteCorpseGame() {
 		if (!contextRef.current || !canDrawOnCanvas || isGameOver) return;
 		setIsDrawing(false);
 		contextRef.current.closePath();
-	}, [canDrawOnCanvas, isGameOver]);
+	}, [{ canDrawOnCanvas, isGameOver }]);
 
 	const submitSegment = () => {
 		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -263,7 +263,9 @@ export default function ExquisiteCorpseGame() {
 			})
 		);
 		setMessage(
-			`Submitting segment ${segments[currentSegmentIndex]}... Waiting for others.`
+			`Submitting segment ${
+				segments[currentSegmentIndex % TOTAL_SEGMENTS]
+			}... Waiting for others.`
 		);
 		setCanDrawOnCanvas(false);
 		setIsWaitingForOtherPlayers(true);
@@ -340,7 +342,7 @@ export default function ExquisiteCorpseGame() {
 		);
 		setPlayerCount(0);
 		setCurrentSegmentIndex(0);
-		setCurrentSegment(segments[0]); // Reset to 'Head'
+		setCurrentSegment(segments[(currentSegmentIndex + 1) % TOTAL_SEGMENTS]); // Reset to show Head
 		setCanDrawOnCanvas(false);
 		setIsWaitingForOtherPlayers(false);
 		setReceivedCanvasImage(null);
@@ -423,16 +425,10 @@ export default function ExquisiteCorpseGame() {
 							Players in room: {playerCount} / 2
 						</p>
 					)}
-					{/* The following line caused duplication and has been removed */}
-					{/* {!isGameOver && (
-                        <p className="text-xl font-semibold text-gray-800">
-                            Drawing: {currentSegment}
-                        </p>
-                    )} */}
 
 					{!isGameOver && ( // Conditional rendering for the main canvas and its controls
 						<>
-							<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200">
+							<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200 overflow-hidden">
 								<canvas
 									ref={canvasRef}
 									width={800}
@@ -447,6 +443,30 @@ export default function ExquisiteCorpseGame() {
 											: 'cursor-not-allowed'
 									}`}
 								></canvas>
+								{/* Overlay to hide previous segment after swapping */}
+								{receivedCanvasImage &&
+									currentSegmentIndex > 0 && (
+										<div
+											className="absolute top-0 left-0 w-full bg-gray-200 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
+											style={{
+												height: `${
+													SEGMENT_HEIGHT *
+													currentSegmentIndex
+												}px`,
+											}}
+										>
+											Previous Segment Hidden
+										</div>
+									)}
+								{/* Overlay when waiting for other players */}
+								{isWaitingForOtherPlayers && (
+									<div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg text-white text-3xl font-bold text-center p-4 z-10">
+										Submitted!
+										<br />
+										Waiting for other player to submit their
+										segment...
+									</div>
+								)}
 							</div>
 
 							<div className="flex space-x-4 mt-4">
@@ -491,31 +511,24 @@ export default function ExquisiteCorpseGame() {
 							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
 								Game Over!
 							</h2>
-							{/* This line was causing duplication and has been removed */}
-							{/* <p className="text-xl text-gray-700 mb-6">
-                                The Exquisite Corpse is complete!
-                            </p> */}
-							{/* Display both final artworks one below the other */}
 							<div className="flex flex-col items-center space-y-8 mb-8">
-								{' '}
-								{/* Changed to flex-col and space-y */}
 								{finalArtwork && (
 									<img
 										src={finalArtwork}
 										alt="Final Combined Artwork 1"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block" // Removed mx-auto for flex-col centering
+										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
 									/>
 								)}
 								{finalArtwork2 && (
 									<img
 										src={finalArtwork2}
 										alt="Final Combined Artwork 2"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block" // Removed mx-auto for flex-col centering
+										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
 									/>
 								)}
 							</div>
 							<button
-								onClick={handlePlayAgain} // Changed to call handlePlayAgain
+								onClick={handlePlayAgain}
 								className="px-8 py-4 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
 							>
 								Play Again
