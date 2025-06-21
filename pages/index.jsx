@@ -423,12 +423,12 @@ export default function ExquisiteCorpseGame() {
 							Players in room: {playerCount} / 2
 						</p>
 					)}
-					{/* Only show current segment when not game over */}
-					{!isGameOver && (
-						<p className="text-xl font-semibold text-gray-800">
-							Drawing: {currentSegment}
-						</p>
-					)}
+					{/* The following line caused duplication and has been removed */}
+					{/* {!isGameOver && (
+                        <p className="text-xl font-semibold text-gray-800">
+                            Drawing: {currentSegment}
+                        </p>
+                    )} */}
 
 					{!isGameOver && ( // Conditional rendering for the main canvas and its controls
 						<>
