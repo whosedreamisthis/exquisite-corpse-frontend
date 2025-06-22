@@ -12,6 +12,7 @@ const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
 const CANVAS_WIDTH = 800; // Consistent width
 const CANVAS_HEIGHT = 600; // Consistent height
 const SEGMENT_HEIGHT = CANVAS_HEIGHT / TOTAL_SEGMENTS; // Calculate the height of each segment
+const PEEK_HEIGHT = 20; // This should be consistent with frontend logic
 
 export default function ExquisiteCorpseGame() {
 	// Refs for the two canvases and their contexts
@@ -106,7 +107,10 @@ export default function ExquisiteCorpseGame() {
 					setCurrentPlayersWsId(data.playerId);
 				}
 
-				if (data.canvasData) {
+				if (
+					data.hasOwnProperty('canvasData') &&
+					data.canvasData !== null
+				) {
 					setReceivedCanvasImage(data.canvasData);
 					// Draw the received image (previous segment) onto the MAIN drawing canvas immediately
 					if (drawingCanvasRef.current) {
@@ -115,6 +119,8 @@ export default function ExquisiteCorpseGame() {
 							const ctx =
 								drawingCanvasRef.current.getContext('2d');
 							ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear before drawing new base image
+							ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear before drawing new base image
+
 							ctx.drawImage(image, 0, 0);
 						};
 						image.onerror = (error) => {
@@ -125,7 +131,10 @@ export default function ExquisiteCorpseGame() {
 						};
 						image.src = data.canvasData;
 					}
-				} else {
+				} else if (
+					data.hasOwnProperty('canvasData') &&
+					data.canvasData === null
+				) {
 					setReceivedCanvasImage(null); // Clear if no canvas data
 					// If no canvasData and not game over, clear the main drawing canvas
 					if (
