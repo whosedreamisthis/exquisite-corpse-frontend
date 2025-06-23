@@ -709,7 +709,7 @@ export default function ExquisiteCorpseGame() {
 								{/* Changed: Added this class and removed Tailwind positioning */}
 								<button
 									onClick={clearCanvas}
-									className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+									className={`px-2 py-2  text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                 ${
 									canDrawOrPlaceLine && !isGameOver
 										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
@@ -742,7 +742,7 @@ export default function ExquisiteCorpseGame() {
 									!isPlacingRedLine && ( // Show "Done Drawing" if not last segment and not placing line
 										<button
 											onClick={handleDoneDrawing}
-											className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+											className={`px-2 py-2 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                         ${
 											canDrawOrPlaceLine &&
 											!isWaitingForOtherPlayers &&
