@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import axios from 'axios'; // Import axios for HTTP requests
 
 // IMPORTANT: Replace this with the URL of your deployed Render backend later
@@ -60,6 +60,9 @@ export default function ExquisiteCorpseGame() {
 	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
 	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
 
+	// Declare isLastSegment here so it's accessible by all functions
+	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
+
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		// Only connect if we haven't already and are about to join a game
@@ -119,8 +122,6 @@ export default function ExquisiteCorpseGame() {
 							const ctx =
 								drawingCanvasRef.current.getContext('2d');
 							ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear before drawing new base image
-							ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear before drawing new base image
-
 							ctx.drawImage(image, 0, 0);
 						};
 						image.onerror = (error) => {
@@ -287,53 +288,80 @@ export default function ExquisiteCorpseGame() {
 		oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the entire overlay
 	}, []); // No dependencies as it operates on refs
 
-	// --- Event Handlers for Drawing Phase ---
-	const startDrawing = useCallback(
-		(e) => {
-			if (
-				!drawingContextRef.current ||
-				!canDrawOrPlaceLine ||
-				isGameOver ||
-				isPlacingRedLine // Cannot draw if placing red line
-			)
-				return;
-			const { offsetX, offsetY } = e.nativeEvent;
-			setIsDrawing(true);
-			setLastX(offsetX);
-			setLastY(offsetY);
+	// Helper to get coordinates from mouse or touch events
+	const getCoordinates = useCallback((e, canvas) => {
+		const rect = canvas.getBoundingClientRect();
+		const scaleX = canvas.width / rect.width;
+		const scaleY = canvas.height / rect.height;
 
-			// Start drawing path on the main drawing canvas
-			drawingContextRef.current.beginPath();
-			drawingContextRef.current.moveTo(offsetX, offsetY);
-		},
-		[canDrawOrPlaceLine, isGameOver, isPlacingRedLine]
-	);
+		let clientX, clientY;
+		if (e.touches && e.touches.length > 0) {
+			// Touch event
+			clientX = e.touches[0].clientX;
+			clientY = e.touches[0].clientY;
+		} else {
+			// Mouse event
+			clientX = e.clientX;
+			clientY = e.clientY;
+		}
 
-	const draw = useCallback(
+		const x = (clientX - rect.left) * scaleX;
+		const y = (clientY - rect.top) * scaleY;
+		return { x, y };
+	}, []);
+
+	// --- Event Handlers for Drawing Phase (adapted for touch) ---
+	const handleCanvasStart = useCallback(
 		(e) => {
-			// This handler will be used for both drawing and moving the red line
 			if (!canDrawOrPlaceLine || isGameOver) return;
 
-			const { offsetX, offsetY } = e.nativeEvent;
+			e.preventDefault(); // Prevent scrolling on touch devices
 
-			if (isDrawing && !isPlacingRedLine) {
+			const canvas = overlayCanvasRef.current;
+			if (!canvas) return;
+
+			const { x, y } = getCoordinates(e, canvas);
+
+			setIsDrawing(true);
+			setLastX(x);
+			setLastY(y);
+
+			if (!isPlacingRedLine) {
+				// Start drawing path on the main drawing canvas
+				if (!drawingContextRef.current) return;
+				drawingContextRef.current.beginPath();
+				drawingContextRef.current.moveTo(x, y);
+			}
+		},
+		[canDrawOrPlaceLine, isGameOver, isPlacingRedLine, getCoordinates]
+	);
+
+	const handleCanvasMove = useCallback(
+		(e) => {
+			if (!isDrawing || !canDrawOrPlaceLine || isGameOver) return;
+
+			e.preventDefault(); // Prevent scrolling on touch devices
+
+			const canvas = overlayCanvasRef.current;
+			if (!canvas) return;
+
+			const { x, y } = getCoordinates(e, canvas);
+
+			if (!isPlacingRedLine) {
 				// Drawing mode
 				if (!drawingContextRef.current) return;
-				drawingContextRef.current.lineTo(offsetX, offsetY);
+				drawingContextRef.current.lineTo(x, y);
 				drawingContextRef.current.stroke();
-				setLastX(offsetX);
-				setLastY(offsetY);
 				setHasDrawnSomething(true); // User has drawn something
-			} else if (isPlacingRedLine && isDrawing) {
-				// Only move line if mouse is down AND in placing mode
+			} else {
+				// Red line placing mode
 				// Constrain redLineY within canvas bounds
-				const newRedLineY = Math.max(
-					0,
-					Math.min(CANVAS_HEIGHT, offsetY)
-				);
+				const newRedLineY = Math.max(0, Math.min(CANVAS_HEIGHT, y));
 				setRedLineY(newRedLineY); // Update the red line's Y position
 				drawRedLineOnOverlay(newRedLineY); // Redraw the line
 			}
+			setLastX(x);
+			setLastY(y);
 		},
 		[
 			isDrawing,
@@ -341,36 +369,33 @@ export default function ExquisiteCorpseGame() {
 			isGameOver,
 			isPlacingRedLine,
 			drawRedLineOnOverlay,
+			getCoordinates,
 		]
 	);
 
-	const stopDrawing = useCallback(() => {
+	const handleCanvasEnd = useCallback(() => {
 		if (!canDrawOrPlaceLine || isGameOver) return;
 
 		if (isDrawing) {
 			// If we were in drawing mode, close the path
-			if (drawingContextRef.current) {
+			if (drawingContextRef.current && !isPlacingRedLine) {
 				drawingContextRef.current.closePath();
 			}
 			setIsDrawing(false);
-			// DO NOT immediately transition to isPlacingRedLine here.
-			// That transition will be handled by the "Done Drawing" button.
 		}
-		// If it was the red line being dragged, just stop the dragging state (isDrawing false)
-		// The line remains visible as per its last setRedLineY and drawRedLineOnOverlay call.
-	}, [canDrawOrPlaceLine, isGameOver, isDrawing]);
+	}, [canDrawOrPlaceLine, isGameOver, isDrawing, isPlacingRedLine]);
 
 	// Use onMouseOut to also stop drawing or placing line if mouse leaves canvas
 	const handleMouseOut = useCallback(() => {
 		if (isDrawing && !isPlacingRedLine) {
 			// If actively drawing and not placing line
-			stopDrawing(); // This just stops the stroke, doesn't transition to line placement
+			handleCanvasEnd(); // Stop drawing
 		} else if (isPlacingRedLine && isDrawing) {
 			// If dragging the line and mouse goes out
 			setIsDrawing(false); // Stop the "drag" state for the line
 			// The red line remains visible where it was last
 		}
-	}, [isDrawing, isPlacingRedLine, stopDrawing]);
+	}, [isDrawing, isPlacingRedLine, handleCanvasEnd]);
 
 	// --- Action Buttons ---
 	const clearCanvas = () => {
@@ -404,52 +429,50 @@ export default function ExquisiteCorpseGame() {
 			setMessage('WebSocket not connected. Cannot submit.');
 			return;
 		}
-		// If it's the last segment, we don't need isPlacingRedLine to be true for submission
-		const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
 
 		if (
 			!canDrawOrPlaceLine ||
 			isWaitingForOtherPlayers ||
 			isGameOver ||
-			(!isPlacingRedLine && !isLastSegment) // If not last segment, must be placing red line
+			(!isPlacingRedLine && !isLastSegment) || // Must be in placing mode if not the last segment
+			(!hasDrawnSomething && !isPlacingRedLine) // Must have drawn something OR be in placing mode
 		) {
-			setMessage('Cannot submit now.');
+			setMessage(
+				'Cannot submit: Not your turn, game over, or conditions not met.'
+			);
 			return;
 		}
 
-		const canvas = drawingCanvasRef.current; // Get data from the main drawing canvas
-		if (!canvas) return;
+		// Get the current canvas data as a Data URL (PNG format for transparency)
+		const currentCanvasData =
+			drawingCanvasRef.current.toDataURL('image/png');
 
-		// Get current canvas content as data URL
-		const dataURL = canvas.toDataURL('image/png');
+		// Send the current drawing and the red line Y position to the server
 		wsRef.current.send(
 			JSON.stringify({
 				type: 'submitSegment',
 				gameRoomId: gameRoomId,
-				canvasData: dataURL,
-				redLineY: isLastSegment ? CANVAS_HEIGHT : redLineY, // Send redLineY, but for last segment, send canvas height (effectively no peek)
+				canvasData: currentCanvasData,
+				redLineY: isLastSegment ? null : redLineY, // Only send redLineY if it's not the last segment
 				playerId: currentPlayersWsId, // Use the state variable for player ID
 			})
 		);
-
-		setMessage(
-			`Submitting segment ${
-				segments[currentSegmentIndex % TOTAL_SEGMENTS]
-			}... Waiting for others.`
-		);
-		setCanDrawOrPlaceLine(false);
-		setIsWaitingForOtherPlayers(true);
-		setIsPlacingRedLine(false); // Exit line placement mode
-		clearRedLineFromOverlay(); // Ensure red line is cleared on submit
-		setHasDrawnSomething(false); // Reset drawing flag
+		setIsDrawing(false); // Stop drawing
+		setIsWaitingForOtherPlayers(true); // Now waiting for other players
+		setCanDrawOrPlaceLine(false); // Cannot draw anymore until next turn
+		setHasDrawnSomething(false); // Reset drawing flag for next turn
+		setIsPlacingRedLine(false); // Exit line placing mode after submission
+		clearRedLineFromOverlay(); // Clear the red line from the overlay after submission
 	};
 
 	// --- Game Setup / Join ---
 	const createNewGame = async () => {
 		// REMOVED: playerName validation
 		try {
+			// Keeping endpoint as /api/createGame based on your feedback
 			const response = await axios.post(
-				'http://localhost:8080/api/createGame'
+				'http://localhost:8080/api/createGame',
+				{} // Add empty body explicitly
 			);
 			const { gameCode: newGameCode } = response.data;
 			setGeneratedGameCode(newGameCode);
@@ -490,8 +513,6 @@ export default function ExquisiteCorpseGame() {
 		setRedLineY(CANVAS_HEIGHT / 2); // Start red line in the middle
 		drawRedLineOnOverlay(CANVAS_HEIGHT / 2); // Draw it immediately
 	}, [drawRedLineOnOverlay, currentSegmentIndex]);
-
-	// ... (previous code)
 
 	const handlePlayAgain = () => {
 		// Close existing WebSocket connection if open
@@ -537,10 +558,7 @@ export default function ExquisiteCorpseGame() {
 		clearRedLineFromOverlay(); // Ensure overlay is clear
 	};
 
-	// ... (rest of your code)
-
 	// Determine if the "Submit Segment" button should be enabled/visible
-	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
 	const canSubmitSegment =
 		canDrawOrPlaceLine &&
 		!isWaitingForOtherPlayers &&
@@ -656,22 +674,14 @@ export default function ExquisiteCorpseGame() {
 									width={CANVAS_WIDTH}
 									height={CANVAS_HEIGHT}
 									// Attach mouse events for both drawing and line placement
-									onMouseDown={(e) => {
-										// If it's the last segment, only allow drawing, no red line placement.
-										if (isLastSegment) {
-											startDrawing(e);
-										} else if (isPlacingRedLine) {
-											// When in line placing mode, onMouseDown starts a "drag" for the line
-											setIsDrawing(true); // Re-use isDrawing to indicate dragging
-											setLastY(e.nativeEvent.offsetY);
-										} else {
-											// Otherwise, start drawing a stroke
-											startDrawing(e);
-										}
-									}}
-									onMouseMove={draw}
-									onMouseUp={stopDrawing}
+									onMouseDown={handleCanvasStart}
+									onMouseMove={handleCanvasMove}
+									onMouseUp={handleCanvasEnd}
 									onMouseOut={handleMouseOut}
+									onTouchStart={handleCanvasStart}
+									onTouchMove={handleCanvasMove}
+									onTouchEnd={handleCanvasEnd}
+									onTouchCancel={handleCanvasEnd}
 									className={`relative rounded-lg ${
 										canDrawOrPlaceLine
 											? 'cursor-crosshair'
