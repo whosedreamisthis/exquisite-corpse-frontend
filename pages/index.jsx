@@ -620,7 +620,7 @@ export default function ExquisiteCorpseGame() {
 				<div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl flex flex-col items-center space-y-6 relative">
 					{' '}
 					{/* Changed: Added 'relative' */}
-					<p className="text-xl text-gray-700 font-medium">
+					<p className="message text-xl text-gray-700 font-medium">
 						{message}
 					</p>
 					{gameRoomId &&
@@ -784,7 +784,7 @@ export default function ExquisiteCorpseGame() {
 								{(isPlacingRedLine || isLastSegment) && ( // Show "Submit Segment" if in line placing mode OR if it's the last segment
 									<button
 										onClick={submitSegment}
-										className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+										className={`px-3 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                         ${
 											canSubmitSegment
 												? 'bg-green-600 text-white shadow-lg hover:bg-green-700'
