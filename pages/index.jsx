@@ -53,7 +53,7 @@ export default function ExquisiteCorpseGame() {
 		useState(false); // Whether current player submitted and is waiting
 	const [receivedCanvasImage, setReceivedCanvasImage] = useState(null); // Data URL for the previous player's full drawing
 	const [previousRedLineY, setPreviousRedLineY] = useState(null); // The redLineY from the previous player's submission
-	const [playerName, setPlayerName] = useState(''); // State for player name input
+	// REMOVED: playerName state
 	const [isGameOver, setIsGameOver] = useState(false);
 	const [finalArtwork, setFinalArtwork] = useState(null); // Stores the final combined artwork for player 1
 	const [finalArtwork2, setFinalArtwork2] = useState(null); // New state to store the final combined artwork for player 2
@@ -70,7 +70,7 @@ export default function ExquisiteCorpseGame() {
 
 			// Capture the current values for initial joinGame message
 			const codeToJoinOnOpen = generatedGameCode || gameCode;
-			const nameForJoin = playerName;
+			// REMOVED: nameForJoin variable as playerName is removed
 
 			ws.onopen = () => {
 				console.log('WebSocket connected. Sending joinGame message...');
@@ -80,7 +80,7 @@ export default function ExquisiteCorpseGame() {
 						type: 'joinGame',
 						gameCode: codeToJoinOnOpen,
 						playerId: null, // Send null initially, server will set this
-						playerName: nameForJoin,
+						// REMOVED: playerName from the message
 					})
 				);
 			};
@@ -227,13 +227,7 @@ export default function ExquisiteCorpseGame() {
 				wsRef.current = null; // Ensure the ref is cleared
 			};
 		}
-	}, [
-		hasJoinedGame,
-		generatedGameCode,
-		gameCode,
-		playerName,
-		currentPlayersWsId,
-	]); // Ensure all dependencies are correctly listed
+	}, [hasJoinedGame, generatedGameCode, gameCode, currentPlayersWsId]); // playerName removed from dependencies
 
 	// Canvas setup: Initialize contexts for both canvases
 	useEffect(() => {
@@ -452,10 +446,7 @@ export default function ExquisiteCorpseGame() {
 
 	// --- Game Setup / Join ---
 	const createNewGame = async () => {
-		if (playerName.trim() === '') {
-			setMessage('Please enter your name before creating a game.');
-			return;
-		}
+		// REMOVED: playerName validation
 		try {
 			const response = await axios.post(
 				'http://localhost:8080/api/createGame'
@@ -472,10 +463,7 @@ export default function ExquisiteCorpseGame() {
 	};
 
 	const joinExistingGame = () => {
-		if (playerName.trim() === '') {
-			setMessage('Please enter your name before joining a game.');
-			return;
-		}
+		// REMOVED: playerName validation
 		if (gameCode.trim() === '') {
 			setMessage('Please enter a game code to join.');
 			return;
@@ -561,18 +549,11 @@ export default function ExquisiteCorpseGame() {
 					<h2 className="text-2xl font-semibold text-gray-800 mb-4">
 						Welcome!
 					</h2>
-					<input
-						type="text"
-						placeholder="Enter your Player Name"
-						value={playerName}
-						onChange={(e) => setPlayerName(e.target.value)}
-						className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-purple-500 focus:border-purple-500"
-						maxLength={20}
-					/>
+					{/* REMOVED: Player Name input field */}
 					<div className="space-y-4">
 						<button
 							onClick={createNewGame}
-							className="w-full bg-purple-600 text-white py-3 rounded-lg text-xl font-bold hover:bg-purple-700 transition-colors shadow-md"
+							className="w-full p-3 border border-gray-300 rounded-lg text-lg focus:ring-purple-500 focus:border-purple-500"
 						>
 							Create New Game
 						</button>
