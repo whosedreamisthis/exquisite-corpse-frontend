@@ -24,3 +24,18 @@ body {
 	color: var(--foreground);
 	font-family: Arial, Helvetica, sans-serif;
 }
+
+.game-buttons-container {
+	position: absolute; /* Position the container absolutely */
+	bottom: 20px; /* Distance from the bottom of its relative parent */
+	right: 20px; /* Distance from the right of its relative parent */
+	display: flex; /* Keep buttons in a row */
+	gap: 16px; /* Space between buttons (equivalent to Tailwind's space-x-4) */
+	z-index: 40; /* Ensure buttons are on top of other elements, higher than canvas z-indexes */
+}
+
+/* Optional: Add some basic styling for the buttons if you want them to pop more */
+.game-buttons-container button {
+	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); /* Subtle shadow for buttons */
+	border: none; /* Remove default button border */
+}

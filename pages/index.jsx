@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import axios from 'axios'; // Import axios for HTTP requests
+// No need to import globals.css here, it should be in _app.js or _app.tsx
 
 // IMPORTANT: Replace this with the URL of your deployed Render backend later
 // For now, it will use localhost for testing against your local backend.
@@ -616,7 +617,9 @@ export default function ExquisiteCorpseGame() {
 				</div>
 			) : (
 				// Game screen once a game is joined/created
-				<div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl flex flex-col items-center space-y-6">
+				<div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl flex flex-col items-center space-y-6 relative">
+					{' '}
+					{/* Changed: Added 'relative' */}
 					<p className="text-xl text-gray-700 font-medium">
 						{message}
 					</p>
@@ -626,7 +629,6 @@ export default function ExquisiteCorpseGame() {
 								Game Code: {generatedGameCode || gameCode}
 							</p>
 						)}
-
 					{!isGameOver && ( // Conditional rendering for the main canvas and its controls
 						<>
 							<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200 overflow-hidden">
@@ -701,26 +703,46 @@ export default function ExquisiteCorpseGame() {
 								)}
 							</div>
 
-							<div className="flex space-x-4 mt-4">
+							{/* This is the div containing your buttons */}
+							<div className="game-buttons-container">
+								{' '}
+								{/* Changed: Added this class and removed Tailwind positioning */}
 								<button
 									onClick={clearCanvas}
-									className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+									className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                 ${
 									canDrawOrPlaceLine && !isGameOver
 										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
 										: 'bg-gray-400 cursor-not-allowed shadow-inner'
 								}`}
 									disabled={!canDrawOrPlaceLine || isGameOver}
+									title="Clear Canvas" // Add a title for accessibility
 								>
-									Clear Canvas
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										fill="none"
+										viewBox="0 0 24 24"
+										strokeWidth={2.5}
+										stroke="currentColor"
+										className="w-7 h-7"
+									>
+										<path
+											strokeLinecap="round"
+											strokeLinejoin="round"
+											d="M6 18L18 6M6 6l12 12"
+										/>
+									</svg>
+									<span className="sr-only">
+										Clear Canvas
+									</span>{' '}
+									{/* For screen readers */}
 								</button>
-
 								{/* Conditionally show Done Drawing or Submit Segment button */}
 								{!isLastSegment &&
 									!isPlacingRedLine && ( // Show "Done Drawing" if not last segment and not placing line
 										<button
 											onClick={handleDoneDrawing}
-											className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+											className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                         ${
 											canDrawOrPlaceLine &&
 											!isWaitingForOtherPlayers &&
@@ -737,33 +759,76 @@ export default function ExquisiteCorpseGame() {
 												!hasDrawnSomething ||
 												isDrawing
 											} // Disabled if conditions not met
+											title="Done Drawing" // Add a title for accessibility
 										>
-											Done Drawing
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												strokeWidth={2.5}
+												stroke="currentColor"
+												className="w-7 h-7"
+											>
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+												/>
+											</svg>
+											<span className="sr-only">
+												Done Drawing
+											</span>{' '}
+											{/* For screen readers */}
 										</button>
 									)}
-
 								{(isPlacingRedLine || isLastSegment) && ( // Show "Submit Segment" if in line placing mode OR if it's the last segment
 									<button
 										onClick={submitSegment}
-										className={`px-8 py-4 text-xl font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105
+										className={`px-6 py-3 text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                         ${
 											canSubmitSegment
 												? 'bg-green-600 text-white shadow-lg hover:bg-green-700'
 												: 'bg-gray-400 cursor-not-allowed shadow-inner'
 										}`}
 										disabled={!canSubmitSegment}
+										title={
+											isLastSegment
+												? 'Submit Final Artwork'
+												: 'Submit Segment'
+										} // Dynamic title
 									>
-										{isLastSegment &&
-										hasDrawnSomething &&
-										!isDrawing // Change text for final submission
-											? 'Submit Final Artwork'
-											: 'Submit Segment'}
+										<svg
+											xmlns="http://www.w3.org/2000/svg"
+											fill="none"
+											viewBox="0 0 24 24"
+											strokeWidth={2.5}
+											stroke="currentColor"
+											className="w-7 h-7"
+										>
+											{isLastSegment ? (
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+												/> // Checkmark for final submit
+											) : (
+												<path
+													strokeLinecap="round"
+													strokeLinejoin="round"
+													d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+												/> // Send icon for segment
+											)}
+										</svg>
+										<span className="sr-only">
+											{isLastSegment
+												? 'Submit Final Artwork'
+												: 'Submit Segment'}
+										</span>
 									</button>
 								)}
 							</div>
 						</>
 					)}
-
 					{isGameOver && (
 						<div className="text-center">
 							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
