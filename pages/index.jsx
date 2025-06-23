@@ -491,6 +491,8 @@ export default function ExquisiteCorpseGame() {
 		drawRedLineOnOverlay(CANVAS_HEIGHT / 2); // Draw it immediately
 	}, [drawRedLineOnOverlay, currentSegmentIndex]);
 
+	// ... (previous code)
+
 	const handlePlayAgain = () => {
 		// Close existing WebSocket connection if open
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -499,34 +501,43 @@ export default function ExquisiteCorpseGame() {
 		wsRef.current = null; // Ensure the ref is cleared immediately
 
 		// Reset all game-specific states to their initial, pre-joined game values
-		// PlayerName is intentionally kept to avoid re-typing
 		setIsDrawing(false);
 		setLastX(0);
 		setLastY(0);
-		setGameCode('');
-		setGeneratedGameCode('');
+		setHasDrawnSomething(false);
+		setIsPlacingRedLine(false);
+		setRedLineY(CANVAS_HEIGHT); // Reset to default bottom position
+
+		setGameCode(''); // Clear user input game code
+		setGeneratedGameCode(''); // Clear generated game code
 		setGameRoomId(null);
-		setMessage(
-			'Your game ended. Enter a game code to join or create a new one!'
-		);
+		setMessage('Enter a game code to join or create one!'); // Initial message
 		setPlayerCount(0);
 		setCurrentSegmentIndex(0);
-		setCurrentSegment(segments[0]); // Reset to show Head for the next game
+		setCurrentSegment(segments[1]); // Assuming 'Head' is segment 0, so next is 'Torso'
 		setCanDrawOrPlaceLine(false);
 		setIsWaitingForOtherPlayers(false);
 		setReceivedCanvasImage(null);
-		setPreviousRedLineY(null); // Clear previous red line Y
-		setIsGameOver(false);
+		setPreviousRedLineY(null);
+		setIsGameOver(false); // Explicitly reset game over state
 		setFinalArtwork(null);
 		setFinalArtwork2(null);
-		setCurrentPlayersWsId(null);
-		setIsPlacingRedLine(false); // Reset red line placement mode
-		setRedLineY(CANVAS_HEIGHT); // Reset red line position
-		clearRedLineFromOverlay(); // Ensure red line is cleared from overlay
-		setHasDrawnSomething(false); // Reset drawing flag
+		setHasJoinedGame(false); // Go back to the initial screen
+		setCurrentPlayersWsId(null); // Clear player ID
 
-		setHasJoinedGame(false); // Set hasJoinedGame to false to render the initial game screen
+		// Clear canvases
+		if (drawingContextRef.current) {
+			drawingContextRef.current.clearRect(
+				0,
+				0,
+				CANVAS_WIDTH,
+				CANVAS_HEIGHT
+			);
+		}
+		clearRedLineFromOverlay(); // Ensure overlay is clear
 	};
+
+	// ... (rest of your code)
 
 	// Determine if the "Submit Segment" button should be enabled/visible
 	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
@@ -744,7 +755,7 @@ export default function ExquisiteCorpseGame() {
 					)}
 
 					{isGameOver && (
-						<div className="mt-8 text-center">
+						<div className="text-center">
 							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
 								Game Over!
 							</h2>
