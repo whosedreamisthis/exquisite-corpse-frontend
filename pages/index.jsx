@@ -539,9 +539,11 @@ export default function ExquisiteCorpseGame() {
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 p-8 flex flex-col items-center justify-center font-sans">
-			<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
-				Exquisite Corpse Game
-			</h1>
+			{!hasJoinedGame && (
+				<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
+					Exquisite Corpse Game
+				</h1>
+			)}
 
 			{!hasJoinedGame ? (
 				// Initial screen: Join or Create
@@ -595,11 +597,6 @@ export default function ExquisiteCorpseGame() {
 								Game Code: {generatedGameCode || gameCode}
 							</p>
 						)}
-					{!isGameOver && ( // Only show player count when not game over
-						<p className="text-lg text-gray-600">
-							Players in room: {playerCount} / 2
-						</p>
-					)}
 
 					{!isGameOver && ( // Conditional rendering for the main canvas and its controls
 						<>
