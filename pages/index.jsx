@@ -236,7 +236,11 @@ export default function ExquisiteCorpseGame() {
 	}, []);
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 flex flex-col items-center justify-center font-sans">
+		<div
+			className={`min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 flex flex-col items-center justify-center font-sans  ${
+				!isGameOver ? 'overflow-hidden' : ''
+			}`}
+		>
 			{!hasJoinedGame ? (
 				// Initial screen: Join or Create
 
