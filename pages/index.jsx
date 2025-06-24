@@ -617,7 +617,7 @@ export default function ExquisiteCorpseGame() {
 				</div>
 			) : (
 				// Game screen once a game is joined/created
-				<div className="bg-white p-8 rounded-2xl shadow-xl w-full max-w-4xl flex flex-col items-center space-y-6 relative">
+				<div className="bg-red-300 rounded-2xl shadow-xl w-full max-w-3xl flex flex-col items-center relative">
 					{' '}
 					{/* Changed: Added 'relative' */}
 					<p className="message text-xl text-gray-700 font-medium">
