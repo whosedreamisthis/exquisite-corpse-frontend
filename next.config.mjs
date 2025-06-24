@@ -6,7 +6,7 @@ const nextConfig = {
 	// Set the basePath to your GitHub repository name.
 	// For example, if your repository is named 'my-exquisite-corpse-game',
 	// this should be '/my-exquisite-corpse-game'.
-	basePath: '/exquisite-corpse-frontend', // <<< IMPORTANT: Replace with your actual repository name
+	// basePath: '/exquisite-corpse-frontend', // <<< IMPORTANT: Replace with your actual repository name
 
 	// If you are using next/image, unoptimized: true is recommended for static exports
 	images: {

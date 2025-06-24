@@ -4,8 +4,8 @@ export default function GameOver({
 	handlePlayAgain,
 }) {
 	return (
-		<div className="text-center">
-			<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
+		<div className="text-center mt-5">
+			<h2 className="text-4xl font-extrabold text-purple-700 my-4 animate-bounce">
 				Game Over!
 			</h2>
 			<div className="flex flex-col items-center space-y-8 mb-8">

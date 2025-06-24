@@ -4,8 +4,8 @@ import axios from 'axios'; // Import axios for HTTP requests
 import GameRoom from './game-room'; // Import the new GameRoom component
 import Lobby from './lobby';
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
-// const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
-const WS_URL = 'https://satin-lumbar-book.glitch.me';
+const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
+//const WS_URL = 'https://satin-lumbar-book.glitch.me';
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -237,12 +237,6 @@ export default function ExquisiteCorpseGame() {
 
 	return (
 		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 flex flex-col items-center justify-center font-sans">
-			{!hasJoinedGame && (
-				<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
-					Exquisite Corpse Game
-				</h1>
-			)}
-
 			{!hasJoinedGame ? (
 				// Initial screen: Join or Create
 
