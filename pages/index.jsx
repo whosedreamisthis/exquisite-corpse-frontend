@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import axios from 'axios'; // Import axios for HTTP requests
-// No need to import globals.css here, it should be in _app.js or _app.tsx
-
-// IMPORTANT: Replace this with the URL of your deployed Render backend later
-// For now, it will use localhost for testing against your local backend.
+import GameOver from './game-over';
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
 const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
 
@@ -887,33 +884,11 @@ export default function ExquisiteCorpseGame() {
 						</>
 					)}
 					{isGameOver && (
-						<div className="text-center">
-							<h2 className="text-4xl font-extrabold text-purple-700 mb-4 animate-bounce">
-								Game Over!
-							</h2>
-							<div className="flex flex-col items-center space-y-8 mb-8">
-								{finalArtwork && (
-									<img
-										src={finalArtwork}
-										alt="Final Combined Artwork 1"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
-									/>
-								)}
-								{finalArtwork2 && (
-									<img
-										src={finalArtwork2}
-										alt="Final Combined Artwork 2"
-										className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
-									/>
-								)}
-							</div>
-							<button
-								onClick={handlePlayAgain}
-								className="px-8 py-4 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
-							>
-								Play Again
-							</button>
-						</div>
+						<GameOver
+							finalArtwork={finalArtwork}
+							finalArtwork2={finalArtwork2}
+							handlePlayAgain={handlePlayAgain}
+						></GameOver>
 					)}
 				</div>
 			)}
