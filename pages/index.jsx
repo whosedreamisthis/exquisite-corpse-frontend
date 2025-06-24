@@ -673,10 +673,10 @@ export default function ExquisiteCorpseGame() {
 				</div>
 			) : (
 				// Game screen once a game is joined/created
-				<div className="bg-red-300 rounded-2xl shadow-xl w-full max-w-3xl flex flex-col items-center relative">
+				<div className="w-full max-w-3xl flex flex-col items-center relative">
 					{' '}
 					{/* Changed: Added 'relative' */}
-					<p className="message text-xl text-gray-700 font-medium">
+					<p className="message text-xl text-gray-700 font-medium my-5">
 						{message}
 					</p>
 					{gameRoomId &&

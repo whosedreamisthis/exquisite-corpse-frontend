@@ -13,14 +13,14 @@ export default function GameOver({
 					<img
 						src={finalArtwork}
 						alt="Final Combined Artwork 1"
-						className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
+						className="bg-white max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
 					/>
 				)}
 				{finalArtwork2 && (
 					<img
 						src={finalArtwork2}
 						alt="Final Combined Artwork 2"
-						className="max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
+						className="bg-white max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
 					/>
 				)}
 			</div>
