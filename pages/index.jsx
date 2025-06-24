@@ -90,7 +90,11 @@ export default function ExquisiteCorpseGame() {
 					segments[(data.currentSegmentIndex + 1) % TOTAL_SEGMENTS]
 				);
 
-				setCanDrawOrPlaceLine(data.canDraw || false);
+				setCanDrawOrPlaceLine(
+					data.canDraw &&
+						data.playerCount === 2 &&
+						!data.isWaitingForOthers
+				);
 				setIsWaitingForOtherPlayers(data.isWaitingForOthers || false);
 				setGameRoomId(data.gameRoomId || null);
 
@@ -134,7 +138,7 @@ export default function ExquisiteCorpseGame() {
 				) {
 					setGameCode(data.gameCode || gameCode);
 					setGeneratedGameCode(data.gameCode || generatedGameCode);
-					setCanDrawOrPlaceLine(data.canDraw);
+					// setCanDrawOrPlaceLine(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
 					setReceivedCanvasImage(data.canvasData);
 					setPreviousRedLineY(data.previousRedLineY || null);
