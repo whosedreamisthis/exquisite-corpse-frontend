@@ -25,6 +25,8 @@ export default function GameRoom({
 	handlePlayAgain,
 	dynamicCanvasWidth, // Passed from index.jsx
 	dynamicCanvasHeight, // Passed from index.jsx
+	setCanDrawOrPlaceLine, // Accept the setter
+	setIsWaitingForOtherPlayers, // Accept the setter
 }) {
 	// Refs for the two canvases and their contexts
 	const drawingCanvasRef = useRef(null); // Main canvas for actual drawing
@@ -305,8 +307,8 @@ export default function GameRoom({
 			})
 		);
 		setIsDrawing(false); // Stop drawing
-		// setIsWaitingForOtherPlayers(true); // This state is now managed by parent based on WS message
-		// setCanDrawOrPlaceLine(false); // This state is now managed by parent based on WS message
+		setIsWaitingForOtherPlayers(true); // This state is now managed by parent based on WS message
+		setCanDrawOrPlaceLine(false); // This state is now managed by parent based on WS message
 		setHasDrawnSomething(false); // Reset drawing flag for next turn
 		setIsPlacingRedLine(false); // Exit line placing mode after submission
 		clearRedLineFromOverlay(); // Clear the red line from the overlay after submission

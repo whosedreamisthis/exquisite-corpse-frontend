@@ -295,6 +295,8 @@ export default function ExquisiteCorpseGame() {
 					currentPlayersWsId={currentPlayersWsId}
 					wsRef={wsRef}
 					setMessage={setMessage}
+					setCanDrawOrPlaceLine={setCanDrawOrPlaceLine} // Pass the setter
+					setIsWaitingForOtherPlayers={setIsWaitingForOtherPlayers} // Pass the setter
 					handlePlayAgain={handlePlayAgain}
 					dynamicCanvasWidth={dynamicCanvasWidth}
 					dynamicCanvasHeight={dynamicCanvasHeight}
