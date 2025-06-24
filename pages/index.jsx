@@ -4,8 +4,8 @@ import axios from 'axios'; // Import axios for HTTP requests
 import GameRoom from './game-room'; // Import the new GameRoom component
 import Lobby from './lobby';
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
-const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
-
+// const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
+const WS_URL = 'https://satin-lumbar-book.glitch.me';
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
