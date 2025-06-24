@@ -23,11 +23,14 @@ body {
 	background: var(--background);
 	color: var(--foreground);
 	font-family: Arial, Helvetica, sans-serif;
+	box-sizing: border-box;
+	padding: 0;
+	margin: 0;
 }
 
 .game-buttons-container {
 	position: absolute; /* Position the container absolutely */
-	bottom: 20px; /* Distance from the bottom of its relative parent */
+	bottom: 50px; /* Distance from the bottom of its relative parent */
 	right: 5px; /* Distance from the right of its relative parent */
 	display: flex; /* Keep buttons in a row */
 	gap: 16px; /* Space between buttons (equivalent to Tailwind's space-x-4) */

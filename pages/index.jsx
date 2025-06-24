@@ -10,9 +10,9 @@ const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
-const CANVAS_WIDTH = 800; // Consistent width
-const CANVAS_HEIGHT = 600; // Consistent height
-const SEGMENT_HEIGHT = CANVAS_HEIGHT / TOTAL_SEGMENTS; // Calculate the height of each segment
+// const CANVAS_WIDTH = 800; // Consistent width
+// const CANVAS_HEIGHT = 600; // Consistent height
+// const SEGMENT_HEIGHT = CANVAS_HEIGHT / TOTAL_SEGMENTS; // Calculate the height of each segment
 const PEEK_HEIGHT = 20; // This should be consistent with frontend logic
 
 export default function ExquisiteCorpseGame() {
@@ -34,7 +34,7 @@ export default function ExquisiteCorpseGame() {
 
 	// New state for red line positioning
 	const [isPlacingRedLine, setIsPlacingRedLine] = useState(false);
-	const [redLineY, setRedLineY] = useState(CANVAS_HEIGHT); // Initial position at bottom of canvas
+	const [redLineY, setRedLineY] = useState(0); // Initial position at bottom of canvas
 
 	// Game State Variables, all managed via WebSocket
 	const [gameCode, setGameCode] = useState(''); // User input for joining game code
@@ -60,10 +60,49 @@ export default function ExquisiteCorpseGame() {
 	const [finalArtwork2, setFinalArtwork2] = useState(null); // New state to store the final combined artwork for player 2
 	const [hasJoinedGame, setHasJoinedGame] = useState(false); // New state to manage initial screen vs game screen
 	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
-
+	const [dynamicCanvasWidth, setDynamicCanvasWidth] = useState(0);
+	const [dynamicCanvasHeight, setDynamicCanvasHeight] = useState(0);
 	// Declare isLastSegment here so it's accessible by all functions
 	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
+	useEffect(() => {
+		function updateCanvasSize() {
+			// Check if window is defined (client-side environment)
+			if (typeof window !== 'undefined') {
+				const headerHeight = 100; // Approximate height of your header/title
+				const footerHeight = 100; // Approximate height for buttons/messages below canvas
+				const padding = 40; // Total padding top/bottom
 
+				// Calculate available height based on viewport and other UI elements
+				const availableHeight =
+					window.innerHeight - headerHeight - footerHeight - padding;
+				const availableWidth = window.innerWidth - padding; // Simple width calculation
+
+				// ... (your existing aspect ratio and min/max logic) ...
+
+				setDynamicCanvasWidth(window.innerWidth);
+				setDynamicCanvasHeight(window.innerHeight);
+
+				console.log(
+					`new size ${window.innerWidth} ${window.innerHeight}`
+				);
+			}
+		}
+
+		// Set initial size
+		updateCanvasSize();
+
+		// Add event listener for window resize
+		if (typeof window !== 'undefined') {
+			window.addEventListener('resize', updateCanvasSize);
+		}
+
+		// Cleanup function for event listener
+		return () => {
+			if (typeof window !== 'undefined') {
+				window.removeEventListener('resize', updateCanvasSize);
+			}
+		};
+	}, []);
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		// Only connect if we haven't already and are about to join a game
@@ -122,7 +161,12 @@ export default function ExquisiteCorpseGame() {
 						image.onload = () => {
 							const ctx =
 								drawingCanvasRef.current.getContext('2d');
-							ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear before drawing new base image
+							ctx.clearRect(
+								0,
+								0,
+								dynamicCanvasWidth,
+								dynamicCanvasHeight
+							); // Clear before drawing new base image
 							ctx.drawImage(image, 0, 0);
 						};
 						image.onerror = (error) => {
@@ -144,7 +188,12 @@ export default function ExquisiteCorpseGame() {
 						data.status !== 'completed'
 					) {
 						const ctx = drawingCanvasRef.current.getContext('2d');
-						ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+						ctx.clearRect(
+							0,
+							0,
+							dynamicCanvasWidth,
+							dynamicCanvasHeight
+						);
 					}
 				}
 
@@ -188,7 +237,7 @@ export default function ExquisiteCorpseGame() {
 						setIsGameOver(false);
 					}
 					// When a new segment begins, reset redLineY to bottom for next player to place
-					setRedLineY(CANVAS_HEIGHT); // Default for placement phase
+					setRedLineY(dynamicCanvasHeight); // Default for placement phase
 					setIsPlacingRedLine(false); // Start in drawing mode
 					setHasDrawnSomething(false); // Reset drawing flag for new segment
 					clearRedLineFromOverlay(); // Clear any existing red line on the overlay
@@ -249,11 +298,11 @@ export default function ExquisiteCorpseGame() {
 		const oCtx = overlayCanvas.getContext('2d');
 		overlayContextRef.current = oCtx;
 		// Ensure overlay is transparent
-		oCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
 
 		// Clear drawing canvas initially if no image is present for the first segment
 		if (!receivedCanvasImage && currentSegmentIndex === 0) {
-			dCtx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+			dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
 		}
 	}, [
 		drawingCanvasRef,
@@ -357,7 +406,10 @@ export default function ExquisiteCorpseGame() {
 			} else {
 				// Red line placing mode
 				// Constrain redLineY within canvas bounds
-				const newRedLineY = Math.max(0, Math.min(CANVAS_HEIGHT, y));
+				const newRedLineY = Math.max(
+					0,
+					Math.min(dynamicCanvasHeight, y)
+				);
 				setRedLineY(newRedLineY); // Update the red line's Y position
 				drawRedLineOnOverlay(newRedLineY); // Redraw the line
 			}
@@ -403,7 +455,12 @@ export default function ExquisiteCorpseGame() {
 		const drawingCanvas = drawingCanvasRef.current;
 		const drawingContext = drawingContextRef.current;
 		if (drawingCanvas && drawingContext) {
-			drawingContext.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT); // Clear the entire drawing canvas
+			drawingContext.clearRect(
+				0,
+				0,
+				dynamicCanvasWidth,
+				dynamicCanvasHeight
+			); // Clear the entire drawing canvas
 			// If there's a previous segment image, re-draw it after clearing
 			if (receivedCanvasImage) {
 				const img = new Image();
@@ -412,8 +469,8 @@ export default function ExquisiteCorpseGame() {
 						img,
 						0,
 						0,
-						CANVAS_WIDTH,
-						CANVAS_HEIGHT
+						dynamicCanvasWidth,
+						dynamicCanvasHeight
 					);
 				};
 				img.src = receivedCanvasImage;
@@ -421,7 +478,7 @@ export default function ExquisiteCorpseGame() {
 		}
 		clearRedLineFromOverlay(); // Also clear the red line from the overlay
 		setIsPlacingRedLine(false); // Exit line placement mode if clearing
-		setRedLineY(CANVAS_HEIGHT); // Reset red line position
+		setRedLineY(dynamicCanvasHeight); // Reset red line position
 		setHasDrawnSomething(false); // Reset drawing flag
 	};
 
@@ -511,8 +568,8 @@ export default function ExquisiteCorpseGame() {
 		// Transition to red line placement mode
 		setIsPlacingRedLine(true);
 		// Set initial red line position (e.g., center or bottom)
-		setRedLineY(CANVAS_HEIGHT / 2); // Start red line in the middle
-		drawRedLineOnOverlay(CANVAS_HEIGHT / 2); // Draw it immediately
+		setRedLineY(dynamicCanvasHeight / 2); // Start red line in the middle
+		drawRedLineOnOverlay(dynamicCanvasHeight / 2); // Draw it immediately
 	}, [drawRedLineOnOverlay, currentSegmentIndex]);
 
 	const handlePlayAgain = () => {
@@ -528,7 +585,7 @@ export default function ExquisiteCorpseGame() {
 		setLastY(0);
 		setHasDrawnSomething(false);
 		setIsPlacingRedLine(false);
-		setRedLineY(CANVAS_HEIGHT); // Reset to default bottom position
+		setRedLineY(dynamicCanvasHeight); // Reset to default bottom position
 
 		setGameCode(''); // Clear user input game code
 		setGeneratedGameCode(''); // Clear generated game code
@@ -552,8 +609,8 @@ export default function ExquisiteCorpseGame() {
 			drawingContextRef.current.clearRect(
 				0,
 				0,
-				CANVAS_WIDTH,
-				CANVAS_HEIGHT
+				dynamicCanvasWidth,
+				dynamicCanvasHeight
 			);
 		}
 		clearRedLineFromOverlay(); // Ensure overlay is clear
@@ -568,7 +625,7 @@ export default function ExquisiteCorpseGame() {
 			(isLastSegment && hasDrawnSomething && !isDrawing));
 
 	return (
-		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 p-8 flex flex-col items-center justify-center font-sans">
+		<div className="min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 flex flex-col items-center justify-center font-sans">
 			{!hasJoinedGame && (
 				<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
 					Exquisite Corpse Game
@@ -635,8 +692,8 @@ export default function ExquisiteCorpseGame() {
 								{/* Main Drawing Canvas (z-index 0, lowest) */}
 								<canvas
 									ref={drawingCanvasRef}
-									width={CANVAS_WIDTH}
-									height={CANVAS_HEIGHT}
+									width={dynamicCanvasWidth}
+									height={dynamicCanvasHeight}
 									className="absolute top-0 left-0 rounded-lg"
 									style={{ zIndex: 0 }}
 								></canvas>
@@ -645,8 +702,8 @@ export default function ExquisiteCorpseGame() {
 								<div
 									className="absolute top-0 left-0 w-full h-full"
 									style={{
-										width: CANVAS_WIDTH,
-										height: CANVAS_HEIGHT,
+										width: dynamicCanvasWidth,
+										height: dynamicCanvasHeight,
 										// Ensure pointerEvents are none so mouse events pass to overlayCanvasRef
 										pointerEvents: 'none',
 										zIndex: 1, // This div sits ABOVE drawingCanvasRef
@@ -673,8 +730,8 @@ export default function ExquisiteCorpseGame() {
 								{/* Overlay Canvas for Red Line (z-index 2, highest, interactive) */}
 								<canvas
 									ref={overlayCanvasRef}
-									width={CANVAS_WIDTH}
-									height={CANVAS_HEIGHT}
+									width={dynamicCanvasWidth}
+									height={dynamicCanvasHeight}
 									// Attach mouse events for both drawing and line placement
 									onMouseDown={handleCanvasStart}
 									onMouseMove={handleCanvasMove}
