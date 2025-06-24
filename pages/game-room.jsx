@@ -1,49 +1,51 @@
+// game-room.jsx
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import GameButtons from './game-buttons';
-const TOTAL_SEGMENTS = 4;
-export default function GameRoom({
-	dynamicCanvasWidth,
-	dynamicCanvasHeight,
-	receivedCanvasImage,
-	isWaitingForOtherPlayers,
-	isGameOver,
-}) {
-	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
-	const overlayContextRef = useRef(null);
+import GameOver from './game-over'; // Make sure to import GameOver
 
-	// New state to track if any drawing has occurred in the current segment
-	const [hasDrawnSomething, setHasDrawnSomething] = useState(false);
+const TOTAL_SEGMENTS = 4; // Define total segments here
+const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
+const PEEK_HEIGHT = 20; // This should be consistent with frontend logic
+
+export default function GameRoom({
+	gameRoomId,
+	message,
+	playerCount,
+	currentSegmentIndex,
+	canDrawOrPlaceLine,
+	isWaitingForOtherPlayers,
+	receivedCanvasImage,
+	previousRedLineY,
+	isGameOver,
+	finalArtwork,
+	finalArtwork2,
+	currentPlayersWsId,
+	wsRef,
+	setMessage,
+	handlePlayAgain,
+	dynamicCanvasWidth, // Passed from index.jsx
+	dynamicCanvasHeight, // Passed from index.jsx
+}) {
 	// Refs for the two canvases and their contexts
 	const drawingCanvasRef = useRef(null); // Main canvas for actual drawing
 	const drawingContextRef = useRef(null);
 
 	const overlayCanvasRef = useRef(null); // Overlay canvas for temporary red line
+	const overlayContextRef = useRef(null);
+
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [lastX, setLastX] = useState(0); // Not strictly needed with two canvases, but kept for consistency
 	const [lastY, setLastY] = useState(0); // Not strictly needed, but kept for consistency
 
+	// New state to track if any drawing has occurred in the current segment
+	const [hasDrawnSomething, setHasDrawnSomething] = useState(false);
+
 	// New state for red line positioning
 	const [isPlacingRedLine, setIsPlacingRedLine] = useState(false);
-	const [redLineY, setRedLineY] = useState(0); // Initial position at bottom of canvas
-	const [currentSegment, setCurrentSegment] = useState(
-		segments[(currentSegmentIndex + 1) % TOTAL_SEGMENTS]
-	); // Show next segment
-	// canDrawOrPlaceLine will now depend on both game state and whether player is in drawing OR line placing mode
-	const [canDrawOrPlaceLine, setCanDrawOrPlaceLine] = useState(false);
-	const canSubmitSegment =
-		canDrawOrPlaceLine &&
-		!isWaitingForOtherPlayers &&
-		!isGameOver &&
-		(isPlacingRedLine ||
-			(isLastSegment && hasDrawnSomething && !isDrawing));
+	const [redLineY, setRedLineY] = useState(dynamicCanvasHeight); // Initial position at bottom of canvas
 
-	// Function to clear the temporary red line from the overlay canvas
-	const clearRedLineFromOverlay = useCallback(() => {
-		const overlayCanvas = overlayCanvasRef.current;
-		const oCtx = overlayContextRef.current;
-		if (!overlayCanvas || !oCtx) return;
-		oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the entire overlay
-	}, []); // No dependencies as it operates on refs
+	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
+
 	// Canvas setup: Initialize contexts for both canvases
 	useEffect(() => {
 		const drawingCanvas = drawingCanvasRef.current;
@@ -73,7 +75,31 @@ export default function GameRoom({
 		overlayCanvasRef,
 		receivedCanvasImage,
 		currentSegmentIndex,
-	]); // Added dependencies for clarity
+		dynamicCanvasWidth,
+		dynamicCanvasHeight,
+	]);
+
+	// Draw received canvas image when it updates
+	useEffect(() => {
+		if (receivedCanvasImage && drawingCanvasRef.current) {
+			const image = new Image();
+			image.onload = () => {
+				const ctx = drawingCanvasRef.current.getContext('2d');
+				ctx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Clear before drawing new base image
+				ctx.drawImage(image, 0, 0);
+			};
+			image.onerror = (error) => {
+				console.error('Error loading received canvas image:', error);
+			};
+			image.src = receivedCanvasImage;
+		} else if (!receivedCanvasImage && drawingCanvasRef.current) {
+			// Clear canvas if receivedCanvasImage becomes null
+			const ctx = drawingCanvasRef.current.getContext('2d');
+			ctx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		}
+	}, [receivedCanvasImage, dynamicCanvasWidth, dynamicCanvasHeight]);
+
+	// Function to draw the temporary red line on the overlay canvas
 	const drawRedLineOnOverlay = useCallback(
 		(y) => {
 			const overlayCanvas = overlayCanvasRef.current;
@@ -91,47 +117,14 @@ export default function GameRoom({
 		},
 		[] // No dependencies as it operates on refs
 	);
-	const submitSegment = () => {
-		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
-			setMessage('WebSocket not connected. Cannot submit.');
-			return;
-		}
 
-		if (
-			!canDrawOrPlaceLine ||
-			isWaitingForOtherPlayers ||
-			isGameOver ||
-			(!isPlacingRedLine && !isLastSegment) || // Must be in placing mode if not the last segment
-			(!hasDrawnSomething && !isPlacingRedLine) // Must have drawn something OR be in placing mode
-		) {
-			setMessage(
-				'Cannot submit: Not your turn, game over, or conditions not met.'
-			);
-			return;
-		}
-
-		// Get the current canvas data as a Data URL (PNG format for transparency)
-		const currentCanvasData =
-			drawingCanvasRef.current.toDataURL('image/png');
-
-		// Send the current drawing and the red line Y position to the server
-		wsRef.current.send(
-			JSON.stringify({
-				type: 'submitSegment',
-				gameRoomId: gameRoomId,
-				canvasData: currentCanvasData,
-				redLineY: isLastSegment ? null : redLineY, // Only send redLineY if it's not the last segment
-				playerId: currentPlayersWsId, // Use the state variable for player ID
-			})
-		);
-		setIsDrawing(false); // Stop drawing
-		setIsWaitingForOtherPlayers(true); // Now waiting for other players
-		setCanDrawOrPlaceLine(false); // Cannot draw anymore until next turn
-		setHasDrawnSomething(false); // Reset drawing flag for next turn
-		setIsPlacingRedLine(false); // Exit line placing mode after submission
-		clearRedLineFromOverlay(); // Clear the red line from the overlay after submission
-	};
-	// New function to handle "Done Drawing" to transition to red line placement
+	// Function to clear the temporary red line from the overlay canvas
+	const clearRedLineFromOverlay = useCallback(() => {
+		const overlayCanvas = overlayCanvasRef.current;
+		const oCtx = overlayContextRef.current;
+		if (!overlayCanvas || !oCtx) return;
+		oCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height); // Clear the entire overlay
+	}, []); // No dependencies as it operates on refs
 
 	// Helper to get coordinates from mouse or touch events
 	const getCoordinates = useCallback((e, canvas) => {
@@ -154,25 +147,8 @@ export default function GameRoom({
 		const y = (clientY - rect.top) * scaleY;
 		return { x, y };
 	}, []);
-	// Function to draw the temporary red line on the overlay canvas
 
-	const handleDoneDrawing = useCallback(() => {
-		// Only trigger if not the last segment
-		if (currentSegmentIndex === TOTAL_SEGMENTS - 1) return;
-
-		// Ensure drawing is stopped and path is closed (if it wasn't already)
-		setIsDrawing(false); // Ensure drawing state is false
-		if (drawingContextRef.current) {
-			drawingContextRef.current.closePath();
-		}
-
-		// Transition to red line placement mode
-		setIsPlacingRedLine(true);
-		// Set initial red line position (e.g., center or bottom)
-		setRedLineY(dynamicCanvasHeight / 2); // Start red line in the middle
-		drawRedLineOnOverlay(dynamicCanvasHeight / 2); // Draw it immediately
-	}, [drawRedLineOnOverlay, currentSegmentIndex]);
-
+	// --- Event Handlers for Drawing Phase (adapted for touch) ---
 	const handleCanvasStart = useCallback(
 		(e) => {
 			if (!canDrawOrPlaceLine || isGameOver) return;
@@ -197,39 +173,6 @@ export default function GameRoom({
 		},
 		[canDrawOrPlaceLine, isGameOver, isPlacingRedLine, getCoordinates]
 	);
-	// Determine if the "Submit Segment" button should be enabled/visible
-	// --- Event Handlers for Drawing Phase (adapted for touch) ---
-	// --- Action Buttons ---
-	const clearCanvas = () => {
-		const drawingCanvas = drawingCanvasRef.current;
-		const drawingContext = drawingContextRef.current;
-		if (drawingCanvas && drawingContext) {
-			drawingContext.clearRect(
-				0,
-				0,
-				dynamicCanvasWidth,
-				dynamicCanvasHeight
-			); // Clear the entire drawing canvas
-			// If there's a previous segment image, re-draw it after clearing
-			if (receivedCanvasImage) {
-				const img = new Image();
-				img.onload = () => {
-					drawingContext.drawImage(
-						img,
-						0,
-						0,
-						dynamicCanvasWidth,
-						dynamicCanvasHeight
-					);
-				};
-				img.src = receivedCanvasImage;
-			}
-		}
-		clearRedLineFromOverlay(); // Also clear the red line from the overlay
-		setIsPlacingRedLine(false); // Exit line placement mode if clearing
-		setRedLineY(dynamicCanvasHeight); // Reset red line position
-		setHasDrawnSomething(false); // Reset drawing flag
-	}; // New function to handle "Done Drawing" to transition to red line placement
 
 	const handleCanvasMove = useCallback(
 		(e) => {
@@ -268,6 +211,7 @@ export default function GameRoom({
 			isPlacingRedLine,
 			drawRedLineOnOverlay,
 			getCoordinates,
+			dynamicCanvasHeight,
 		]
 	);
 
@@ -295,94 +239,207 @@ export default function GameRoom({
 		}
 	}, [isDrawing, isPlacingRedLine, handleCanvasEnd]);
 
-	return (
-		<>
-			<div>
-				<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200 overflow-hidden">
-					{/* Main Drawing Canvas (z-index 0, lowest) */}
-					<canvas
-						ref={drawingCanvasRef}
-						width={dynamicCanvasWidth}
-						height={dynamicCanvasHeight}
-						className="absolute top-0 left-0 rounded-lg"
-						style={{ zIndex: 0 }}
-					></canvas>
+	// --- Action Buttons ---
+	const clearCanvas = () => {
+		const drawingCanvas = drawingCanvasRef.current;
+		const drawingContext = drawingContextRef.current;
+		if (drawingCanvas && drawingContext) {
+			drawingContext.clearRect(
+				0,
+				0,
+				dynamicCanvasWidth,
+				dynamicCanvasHeight
+			); // Clear the entire drawing canvas
+			// If there's a previous segment image, re-draw it after clearing
+			if (receivedCanvasImage) {
+				const img = new Image();
+				img.onload = () => {
+					drawingContext.drawImage(
+						img,
+						0,
+						0,
+						dynamicCanvasWidth,
+						dynamicCanvasHeight
+					);
+				};
+				img.src = receivedCanvasImage;
+			}
+		}
+		clearRedLineFromOverlay(); // Also clear the red line from the overlay
+		setIsPlacingRedLine(false); // Exit line placement mode if clearing
+		setRedLineY(dynamicCanvasHeight); // Reset red line position
+		setHasDrawnSomething(false); // Reset drawing flag
+	};
 
-					{/* This div contains the previous segment hiding overlay (z-index 1, middle) */}
-					<div
-						className="absolute top-0 left-0 w-full h-full"
-						style={{
-							width: dynamicCanvasWidth,
-							height: dynamicCanvasHeight,
-							// Ensure pointerEvents are none so mouse events pass to overlayCanvasRef
-							pointerEvents: 'none',
-							zIndex: 1, // This div sits ABOVE drawingCanvasRef
-						}}
-					>
-						{/* Overlay to hide previous segment based on previous player's redLineY */}
-						{receivedCanvasImage &&
-							currentSegmentIndex > 0 &&
-							previousRedLineY !== null && (
-								<div
-									className="absolute top-0 left-0 w-full bg-gray-200 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
-									style={{
-										// Cover everything from the top down to the previous player's red line
-										height: `${previousRedLineY}px`,
-										pointerEvents: 'none', // Ensure it doesn't block mouse events
-										overflow: 'hidden', // Important for content not to spill
-									}}
-								>
-									Previous Segment Hidden
-								</div>
-							)}
+	const submitSegment = () => {
+		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+			setMessage('WebSocket not connected. Cannot submit.');
+			return;
+		}
+
+		if (
+			!canDrawOrPlaceLine ||
+			isWaitingForOtherPlayers ||
+			isGameOver ||
+			(!isPlacingRedLine && !isLastSegment) || // Must be in placing mode if not the last segment
+			(!hasDrawnSomething && !isPlacingRedLine) // Must have drawn something OR be in placing mode
+		) {
+			setMessage(
+				'Cannot submit: Not your turn, game over, or conditions not met.'
+			);
+			return;
+		}
+
+		// Get the current canvas data as a Data URL (PNG format for transparency)
+		const currentCanvasData =
+			drawingCanvasRef.current.toDataURL('image/png');
+
+		// Send the current drawing and the red line Y position to the server
+		wsRef.current.send(
+			JSON.stringify({
+				type: 'submitSegment',
+				gameRoomId: gameRoomId,
+				canvasData: currentCanvasData,
+				redLineY: isLastSegment ? null : redLineY, // Only send redLineY if it's not the last segment
+				playerId: currentPlayersWsId, // Use the state variable for player ID
+			})
+		);
+		setIsDrawing(false); // Stop drawing
+		// setIsWaitingForOtherPlayers(true); // This state is now managed by parent based on WS message
+		// setCanDrawOrPlaceLine(false); // This state is now managed by parent based on WS message
+		setHasDrawnSomething(false); // Reset drawing flag for next turn
+		setIsPlacingRedLine(false); // Exit line placing mode after submission
+		clearRedLineFromOverlay(); // Clear the red line from the overlay after submission
+	};
+
+	// New function to handle "Done Drawing" to transition to red line placement
+	const handleDoneDrawing = useCallback(() => {
+		// Only trigger if not the last segment
+		if (currentSegmentIndex === TOTAL_SEGMENTS - 1) return;
+
+		// Ensure drawing is stopped and path is closed (if it wasn't already)
+		setIsDrawing(false); // Ensure drawing state is false
+		if (drawingContextRef.current) {
+			drawingContextRef.current.closePath();
+		}
+
+		// Transition to red line placement mode
+		setIsPlacingRedLine(true);
+		// Set initial red line position (e.g., center or bottom)
+		setRedLineY(dynamicCanvasHeight / 2); // Start red line in the middle
+		drawRedLineOnOverlay(dynamicCanvasHeight / 2); // Draw it immediately
+	}, [drawRedLineOnOverlay, currentSegmentIndex, dynamicCanvasHeight]);
+
+	// Determine if the "Submit Segment" button should be enabled/visible
+	const canSubmitSegment =
+		canDrawOrPlaceLine &&
+		!isWaitingForOtherPlayers &&
+		!isGameOver &&
+		(isPlacingRedLine ||
+			(isLastSegment && hasDrawnSomething && !isDrawing));
+
+	return (
+		<div className="w-full max-w-3xl flex flex-col items-center relative">
+			<p className="message text-xl text-gray-700 font-medium">
+				{message}
+			</p>
+
+			{!isGameOver ? ( // Conditional rendering for the main canvas and its controls
+				<>
+					<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200 overflow-hidden">
+						{/* Main Drawing Canvas (z-index 0, lowest) */}
+						<canvas
+							ref={drawingCanvasRef}
+							width={dynamicCanvasWidth}
+							height={dynamicCanvasHeight}
+							className="absolute top-0 left-0 rounded-lg"
+							style={{ zIndex: 0 }}
+						></canvas>
+
+						{/* This div contains the previous segment hiding overlay (z-index 1, middle) */}
+						<div
+							className="absolute top-0 left-0 w-full h-full"
+							style={{
+								width: dynamicCanvasWidth,
+								height: dynamicCanvasHeight,
+								// Ensure pointerEvents are none so mouse events pass to overlayCanvasRef
+								pointerEvents: 'none',
+								zIndex: 1, // This div sits ABOVE drawingCanvasRef
+							}}
+						>
+							{/* Overlay to hide previous segment based on previous player's redLineY */}
+							{receivedCanvasImage &&
+								currentSegmentIndex > 0 &&
+								previousRedLineY !== null && (
+									<div
+										className="absolute top-0 left-0 w-full bg-gray-200 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
+										style={{
+											// Cover everything from the top down to the previous player's red line
+											height: `${previousRedLineY}px`,
+											pointerEvents: 'none', // Ensure it doesn't block mouse events
+											overflow: 'hidden', // Important for content not to spill
+										}}
+									>
+										Previous Segment Hidden
+									</div>
+								)}
+						</div>
+
+						{/* Overlay Canvas for Red Line (z-index 2, highest, interactive) */}
+						<canvas
+							ref={overlayCanvasRef}
+							width={dynamicCanvasWidth}
+							height={dynamicCanvasHeight}
+							// Attach mouse events for both drawing and line placement
+							onMouseDown={handleCanvasStart}
+							onMouseMove={handleCanvasMove}
+							onMouseUp={handleCanvasEnd}
+							onMouseOut={handleMouseOut}
+							onTouchStart={handleCanvasStart}
+							onTouchMove={handleCanvasMove}
+							onTouchEnd={handleCanvasEnd}
+							onTouchCancel={handleCanvasEnd}
+							className={`relative rounded-lg ${
+								canDrawOrPlaceLine
+									? 'cursor-crosshair'
+									: 'cursor-not-allowed'
+							}`}
+							style={{ zIndex: 2 }} // Ensure it's on top
+						></canvas>
+
+						{/* Overlay when waiting for other players */}
+						{isWaitingForOtherPlayers && (
+							<div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg text-white text-3xl font-bold text-center p-4 z-30">
+								Submitted!
+								<br />
+								Waiting for other player to submit their
+								segment...
+							</div>
+						)}
 					</div>
 
-					{/* Overlay Canvas for Red Line (z-index 2, highest, interactive) */}
-					<canvas
-						ref={overlayCanvasRef}
-						width={dynamicCanvasWidth}
-						height={dynamicCanvasHeight}
-						// Attach mouse events for both drawing and line placement
-						onMouseDown={handleCanvasStart}
-						onMouseMove={handleCanvasMove}
-						onMouseUp={handleCanvasEnd}
-						onMouseOut={handleMouseOut}
-						onTouchStart={handleCanvasStart}
-						onTouchMove={handleCanvasMove}
-						onTouchEnd={handleCanvasEnd}
-						onTouchCancel={handleCanvasEnd}
-						className={`relative rounded-lg ${
-							canDrawOrPlaceLine
-								? 'cursor-crosshair'
-								: 'cursor-not-allowed'
-						}`}
-						style={{ zIndex: 2 }} // Ensure it's on top
-					></canvas>
-
-					{/* Overlay when waiting for other players */}
-					{isWaitingForOtherPlayers && (
-						<div className="absolute inset-0 bg-black bg-opacity-70 flex items-center justify-center rounded-lg text-white text-3xl font-bold text-center p-4 z-30">
-							Submitted!
-							<br />
-							Waiting for other player to submit their segment...
-						</div>
-					)}
-				</div>
-			</div>
-			{/* This is the div containing your buttons */}
-			<GameButtons
-				clearCanvas={clearCanvas}
-				isGameOver={isGameOver}
-				canDrawOrPlaceLine={canDrawOrPlaceLine}
-				handleDoneDrawing={handleDoneDrawing}
-				isLastSegment={isLastSegment}
-				canSubmitSegment={canSubmitSegment}
-				submitSegment={submitSegment}
-				isPlacingRedLine={isPlacingRedLine}
-				isWaitingForOtherPlayers={isWaitingForOtherPlayers}
-				hasDrawnSomething={hasDrawnSomething}
-				isDrawing={isDrawing}
-			></GameButtons>
-		</>
+					{/* This is the div containing your buttons */}
+					<GameButtons
+						clearCanvas={clearCanvas}
+						isGameOver={isGameOver}
+						canDrawOrPlaceLine={canDrawOrPlaceLine}
+						handleDoneDrawing={handleDoneDrawing}
+						isLastSegment={isLastSegment}
+						canSubmitSegment={canSubmitSegment}
+						submitSegment={submitSegment}
+						isPlacingRedLine={isPlacingRedLine}
+						isWaitingForOtherPlayers={isWaitingForOtherPlayers}
+						hasDrawnSomething={hasDrawnSomething}
+						isDrawing={isDrawing}
+					></GameButtons>
+				</>
+			) : (
+				<GameOver
+					finalArtwork={finalArtwork}
+					finalArtwork2={finalArtwork2}
+					handlePlayAgain={handlePlayAgain}
+				></GameOver>
+			)}
+		</div>
 	);
 }
