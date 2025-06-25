@@ -1,7 +1,7 @@
 // game-room.jsx
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import GameButtons from './game-buttons';
-import GameOver from './game-over'; // Make sure to import GameOver
+import GameButtons from './game-buttons.jsx'; // Added .jsx extension back
+import GameOver from './game-over.jsx'; // Added .jsx extension back
 
 const TOTAL_SEGMENTS = 4; // Define total segments here
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -25,6 +25,7 @@ export default function GameRoom({
 	handlePlayAgain,
 	dynamicCanvasWidth, // Passed from index.jsx
 	dynamicCanvasHeight, // Passed from index.jsx
+	backendCanvasHeight, // New prop: original canvas height from backend
 	setCanDrawOrPlaceLine, // Accept the setter
 	setIsWaitingForOtherPlayers, // Accept the setter
 }) {
@@ -48,12 +49,58 @@ export default function GameRoom({
 
 	const isLastSegment = currentSegmentIndex === TOTAL_SEGMENTS - 1;
 
+	// State for the scaled previous red line Y position for the overlay
+	const [scaledPreviousRedLineY, setScaledPreviousRedLineY] = useState(null);
+
+	// Effect to scale previousRedLineY when dynamicCanvasHeight or previousRedLineY changes
+	useEffect(() => {
+		console.log(
+			'[Overlay Debug] Effect triggered for previousRedLineY scaling.'
+		);
+		console.log(
+			`[Overlay Debug] Raw previousRedLineY from backend: ${previousRedLineY}`
+		);
+		console.log(
+			`[Overlay Debug] Current dynamicCanvasHeight: ${dynamicCanvasHeight}`
+		);
+		console.log(
+			`[Overlay Debug] Backend original CanvasHeight: ${backendCanvasHeight}`
+		);
+
+		if (
+			previousRedLineY !== null &&
+			backendCanvasHeight &&
+			dynamicCanvasHeight
+		) {
+			const scaleFactor = dynamicCanvasHeight / backendCanvasHeight;
+			const calculatedScaledY = previousRedLineY * scaleFactor;
+			setScaledPreviousRedLineY(calculatedScaledY);
+			console.log(
+				`[Overlay Debug] Calculated scaleFactor: ${scaleFactor}`
+			);
+			console.log(
+				`[Overlay Debug] Scaled previousRedLineY: ${calculatedScaledY}`
+			);
+		} else {
+			setScaledPreviousRedLineY(null);
+			console.log(
+				'[Overlay Debug] previousRedLineY is null or dimensions missing, not applying overlay.'
+			);
+		}
+	}, [previousRedLineY, backendCanvasHeight, dynamicCanvasHeight]);
+
 	// Canvas setup: Initialize contexts for both canvases
 	useEffect(() => {
 		const drawingCanvas = drawingCanvasRef.current;
 		const overlayCanvas = overlayCanvasRef.current;
 
 		if (!drawingCanvas || !overlayCanvas) return;
+
+		// Set canvas dimensions dynamically
+		drawingCanvas.width = dynamicCanvasWidth;
+		drawingCanvas.height = dynamicCanvasHeight;
+		overlayCanvas.width = dynamicCanvasWidth;
+		overlayCanvas.height = dynamicCanvasHeight;
 
 		// Set up drawing canvas context
 		const dCtx = drawingCanvas.getContext('2d');
@@ -88,7 +135,13 @@ export default function GameRoom({
 			image.onload = () => {
 				const ctx = drawingCanvasRef.current.getContext('2d');
 				ctx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Clear before drawing new base image
-				ctx.drawImage(image, 0, 0);
+				ctx.drawImage(
+					image,
+					0,
+					0,
+					dynamicCanvasWidth,
+					dynamicCanvasHeight
+				); // Draw image scaled to canvas size
 			};
 			image.onerror = (error) => {
 				console.error('Error loading received canvas image:', error);
@@ -131,6 +184,7 @@ export default function GameRoom({
 	// Helper to get coordinates from mouse or touch events
 	const getCoordinates = useCallback((e, canvas) => {
 		const rect = canvas.getBoundingClientRect();
+		// Use canvas.width and canvas.height directly for scaling, as they are already set to dynamic values
 		const scaleX = canvas.width / rect.width;
 		const scaleY = canvas.height / rect.height;
 
@@ -283,7 +337,7 @@ export default function GameRoom({
 			!canDrawOrPlaceLine ||
 			isWaitingForOtherPlayers ||
 			isGameOver ||
-			(!isPlacingRedLine && !isLastSegment) || // Must be in placing mode if not the last segment
+			(!isPlacingRedLine && !isLastSegment && hasDrawnSomething) || // Must be in placing mode if not the last segment and has drawn
 			(!hasDrawnSomething && !isPlacingRedLine) // Must have drawn something OR be in placing mode
 		) {
 			setMessage(
@@ -296,13 +350,28 @@ export default function GameRoom({
 		const currentCanvasData =
 			drawingCanvasRef.current.toDataURL('image/png');
 
-		// Send the current drawing and the red line Y position to the server
+		// Scale the redLineY back to the backend's expected height (1920) before sending
+		let normalizedRedLineY = null;
+		if (!isLastSegment && redLineY !== null) {
+			const scaleFactorToBackend =
+				backendCanvasHeight / dynamicCanvasHeight;
+			normalizedRedLineY = Math.round(redLineY * scaleFactorToBackend);
+			console.log(`[Submit Debug] Frontend redLineY: ${redLineY}`);
+			console.log(
+				`[Submit Debug] Scale factor to backend: ${scaleFactorToBackend}`
+			);
+			console.log(
+				`[Submit Debug] Normalized redLineY sent to backend: ${normalizedRedLineY}`
+			);
+		}
+
+		// Send the current drawing and the normalized red line Y position to the server
 		wsRef.current.send(
 			JSON.stringify({
 				type: 'submitSegment',
 				gameRoomId: gameRoomId,
 				canvasData: currentCanvasData,
-				redLineY: isLastSegment ? null : redLineY, // Only send redLineY if it's not the last segment
+				redLineY: normalizedRedLineY, // Send the normalized value
 				playerId: currentPlayersWsId, // Use the state variable for player ID
 			})
 		);
@@ -348,13 +417,20 @@ export default function GameRoom({
 
 			{!isGameOver ? ( // Conditional rendering for the main canvas and its controls
 				<>
-					<div className="relative bg-gray-100 rounded-lg shadow-inner border border-gray-200 overflow-hidden">
+					{/* Container for the canvases to enforce aspect ratio */}
+					<div
+						className="relative bg-gray-100 rounded-lg shadow-inner overflow-hidden m-[5px]" // Removed p-[2px]
+						style={{
+							width: dynamicCanvasWidth,
+							height: dynamicCanvasHeight,
+							// This wrapper div gets the calculated dimensions directly
+						}}
+					>
 						{/* Main Drawing Canvas (z-index 0, lowest) */}
 						<canvas
 							ref={drawingCanvasRef}
-							width={dynamicCanvasWidth}
-							height={dynamicCanvasHeight}
-							className="absolute top-0 left-0 rounded-lg"
+							// width and height attributes are set in useEffect for dynamic sizing
+							className="absolute top-0 left-0 w-full h-full rounded-lg border-2 border-solid border-gray-400 box-border" // Added box-border
 							style={{ zIndex: 0 }}
 						></canvas>
 
@@ -372,12 +448,12 @@ export default function GameRoom({
 							{/* Overlay to hide previous segment based on previous player's redLineY */}
 							{receivedCanvasImage &&
 								currentSegmentIndex > 0 &&
-								previousRedLineY !== null && (
+								scaledPreviousRedLineY !== null && ( // Use scaledPreviousRedLineY
 									<div
 										className="absolute top-0 left-0 w-full bg-gray-200 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
 										style={{
 											// Cover everything from the top down to the previous player's red line
-											height: `${previousRedLineY}px`,
+											height: `${scaledPreviousRedLineY}px`, // Apply scaled value here
 											pointerEvents: 'none', // Ensure it doesn't block mouse events
 											overflow: 'hidden', // Important for content not to spill
 										}}
@@ -390,8 +466,7 @@ export default function GameRoom({
 						{/* Overlay Canvas for Red Line (z-index 2, highest, interactive) */}
 						<canvas
 							ref={overlayCanvasRef}
-							width={dynamicCanvasWidth}
-							height={dynamicCanvasHeight}
+							// width and height attributes are set in useEffect for dynamic sizing
 							// Attach mouse events for both drawing and line placement
 							onMouseDown={handleCanvasStart}
 							onMouseMove={handleCanvasMove}
@@ -401,7 +476,8 @@ export default function GameRoom({
 							onTouchMove={handleCanvasMove}
 							onTouchEnd={handleCanvasEnd}
 							onTouchCancel={handleCanvasEnd}
-							className={`relative rounded-lg ${
+							className={`relative w-full h-full rounded-lg border-2 border-solid border-gray-400 box-border ${
+								// Added box-border
 								canDrawOrPlaceLine
 									? 'cursor-crosshair'
 									: 'cursor-not-allowed'

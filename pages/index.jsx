@@ -1,14 +1,22 @@
 // index.jsx
 import { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios'; // Import axios for HTTP requests
-import GameRoom from './game-room'; // Import the new GameRoom component
-import Lobby from './lobby';
+import GameRoom from './game-room.jsx'; // Import the new GameRoom component
+import Lobby from './lobby.jsx'; // Corrected import path
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
 const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
 //const WS_URL = 'https://satin-lumbar-book.glitch.me';
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
+
+// Define a constant for the backend canvas dimensions
+// This is crucial for scaling previousRedLineY correctly
+const BACKEND_CANVAS_WIDTH = 1080; // Assuming this is the fixed width on the backend
+const BACKEND_CANVAS_HEIGHT = 1920; // Assuming this is the fixed height on the backend
+
+// Define a constant for the desired margin around the canvas
+const CANVAS_MARGIN = 20; // 5 pixels margin on all sides
 
 export default function ExquisiteCorpseGame() {
 	const wsRef = useRef(null); // WebSocket instance
@@ -40,14 +48,54 @@ export default function ExquisiteCorpseGame() {
 
 	// Dynamically update canvas size
 	useEffect(() => {
+		const targetAspectRatio = BACKEND_CANVAS_WIDTH / BACKEND_CANVAS_HEIGHT; // Width / Height = 1080 / 1920
+
 		function updateCanvasSize() {
 			if (typeof window !== 'undefined') {
-				setDynamicCanvasWidth(window.innerWidth);
-				+setDynamicCanvasHeight(window.innerHeight);
+				// Calculate available space minus the total margin (margin on left + margin on right)
+				const availableWidth = window.innerWidth - CANVAS_MARGIN * 2;
+				const availableHeight = window.innerHeight - CANVAS_MARGIN * 2;
+
+				let newWidth;
+				let newHeight;
+
+				// Calculate dimensions based on available space while maintaining aspect ratio
+				// Prioritize width if height is sufficient, otherwise prioritize height
+				const widthBasedHeight = availableWidth / targetAspectRatio;
+				const heightBasedWidth = availableHeight * targetAspectRatio;
+
+				if (widthBasedHeight <= availableHeight) {
+					// Available width is the limiting factor
+					newWidth = availableWidth;
+					newHeight = widthBasedHeight;
+				} else {
+					// Available height is the limiting factor
+					newHeight = availableHeight;
+					newWidth = heightBasedWidth;
+				}
+
+				// Cap the canvas size to the maximum desired resolution if viewport is larger
+				const maxDesiredWidth = BACKEND_CANVAS_WIDTH;
+				const maxDesiredHeight = BACKEND_CANVAS_HEIGHT;
+
+				if (
+					newWidth > maxDesiredWidth ||
+					newHeight > maxDesiredHeight
+				) {
+					const scaleFactor = Math.min(
+						maxDesiredWidth / newWidth,
+						maxDesiredHeight / newHeight
+					);
+					newWidth *= scaleFactor;
+					newHeight *= scaleFactor;
+				}
+
+				setDynamicCanvasWidth(Math.round(newWidth));
+				+setDynamicCanvasHeight(Math.round(newHeight));
 			}
 		}
 
-		updateCanvasSize();
+		updateCanvasSize(); // Set initial size
 		if (typeof window !== 'undefined') {
 			window.addEventListener('resize', updateCanvasSize);
 		}
@@ -237,7 +285,7 @@ export default function ExquisiteCorpseGame() {
 
 	return (
 		<div
-			className={`min-h-screen bg-gradient-to-br from-purple-100 to-indigo-200 flex flex-col items-center justify-center font-sans  ${
+			className={`min-h-screen bg-purple-300 flex flex-col items-center justify-center font-sans  ${
 				!isGameOver ? 'overflow-hidden' : ''
 			}`}
 		>
@@ -273,6 +321,7 @@ export default function ExquisiteCorpseGame() {
 					handlePlayAgain={handlePlayAgain}
 					dynamicCanvasWidth={dynamicCanvasWidth}
 					dynamicCanvasHeight={dynamicCanvasHeight}
+					backendCanvasHeight={BACKEND_CANVAS_HEIGHT} // Pass backend canvas height
 				/>
 			)}
 		</div>
