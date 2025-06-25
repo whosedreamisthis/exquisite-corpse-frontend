@@ -1,7 +1,7 @@
 // game-room.jsx
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import GameButtons from './game-buttons.jsx'; // Added .jsx extension back
-import GameOver from './game-over.jsx'; // Added .jsx extension back
+import GameButtons from './game-buttons.jsx'; // Corrected import path
+import GameOver from './game-over.jsx'; // Corrected import path
 
 const TOTAL_SEGMENTS = 4; // Define total segments here
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -104,6 +104,8 @@ export default function GameRoom({
 
 		// Set up drawing canvas context
 		const dCtx = drawingCanvas.getContext('2d');
+		dCtx.fillStyle = 'white'; // Set fill style to white
+		dCtx.fillRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Fill the canvas with white
 		dCtx.lineCap = 'round';
 		dCtx.strokeStyle = 'black';
 		dCtx.lineWidth = 5;
@@ -113,7 +115,7 @@ export default function GameRoom({
 		const oCtx = overlayCanvas.getContext('2d');
 		overlayContextRef.current = oCtx;
 		// Ensure overlay is transparent
-		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Overlay remains transparent
 
 		// Clear drawing canvas initially if no image is present for the first segment
 		if (!receivedCanvasImage && currentSegmentIndex === 0) {
@@ -387,6 +389,11 @@ export default function GameRoom({
 	const handleDoneDrawing = useCallback(() => {
 		// Only trigger if not the last segment
 		if (currentSegmentIndex === TOTAL_SEGMENTS - 1) return;
+		// If the user hasn't drawn anything, they can't 'done drawing'
+		if (!hasDrawnSomething) {
+			setMessage('Please draw something before marking as Done.');
+			return;
+		}
 
 		// Ensure drawing is stopped and path is closed (if it wasn't already)
 		setIsDrawing(false); // Ensure drawing state is false
@@ -399,7 +406,13 @@ export default function GameRoom({
 		// Set initial red line position (e.g., center or bottom)
 		setRedLineY(dynamicCanvasHeight / 2); // Start red line in the middle
 		drawRedLineOnOverlay(dynamicCanvasHeight / 2); // Draw it immediately
-	}, [drawRedLineOnOverlay, currentSegmentIndex, dynamicCanvasHeight]);
+	}, [
+		drawRedLineOnOverlay,
+		currentSegmentIndex,
+		dynamicCanvasHeight,
+		hasDrawnSomething,
+		setMessage,
+	]);
 
 	// Determine if the "Submit Segment" button should be enabled/visible
 	const canSubmitSegment =
@@ -411,10 +424,8 @@ export default function GameRoom({
 
 	return (
 		<div className="w-full max-w-3xl flex flex-col items-center relative">
-			<p className="message text-xl text-gray-700 font-medium">
-				{message}
-			</p>
-
+			{' '}
+			{/* This is the main game container */}
 			{!isGameOver ? ( // Conditional rendering for the main canvas and its controls
 				<>
 					{/* Container for the canvases to enforce aspect ratio */}
@@ -423,7 +434,6 @@ export default function GameRoom({
 						style={{
 							width: dynamicCanvasWidth,
 							height: dynamicCanvasHeight,
-							// This wrapper div gets the calculated dimensions directly
 						}}
 					>
 						{/* Main Drawing Canvas (z-index 0, lowest) */}
@@ -433,6 +443,18 @@ export default function GameRoom({
 							className="absolute top-0 left-0 w-full h-full rounded-lg border-2 border-solid border-gray-400 box-border" // Added box-border
 							style={{ zIndex: 0 }}
 						></canvas>
+
+						{/* Message displayed within the canvas container */}
+						<div
+							className="absolute top-2 left-2 p-2 rounded-lg text-gray-800 text-lg font-medium bg-white bg-opacity-75 z-40"
+							style={
+								{
+									// This div is now inside the canvas container, so top/left are relative to it
+								}
+							}
+						>
+							{message}
+						</div>
 
 						{/* This div contains the previous segment hiding overlay (z-index 1, middle) */}
 						<div
@@ -454,8 +476,8 @@ export default function GameRoom({
 										style={{
 											// Cover everything from the top down to the previous player's red line
 											height: `${scaledPreviousRedLineY}px`, // Apply scaled value here
-											pointerEvents: 'none', // Ensure it doesn't block mouse events
-											overflow: 'hidden', // Important for content not to spill
+											pointerEvents: 'none',
+											overflow: 'hidden',
 										}}
 									>
 										Previous Segment Hidden
@@ -482,7 +504,7 @@ export default function GameRoom({
 									? 'cursor-crosshair'
 									: 'cursor-not-allowed'
 							}`}
-							style={{ zIndex: 2 }} // Ensure it's on top
+							style={{ zIndex: 2 }}
 						></canvas>
 
 						{/* Overlay when waiting for other players */}
@@ -494,22 +516,27 @@ export default function GameRoom({
 								segment...
 							</div>
 						)}
-					</div>
 
-					{/* This is the div containing your buttons */}
-					<GameButtons
-						clearCanvas={clearCanvas}
-						isGameOver={isGameOver}
-						canDrawOrPlaceLine={canDrawOrPlaceLine}
-						handleDoneDrawing={handleDoneDrawing}
-						isLastSegment={isLastSegment}
-						canSubmitSegment={canSubmitSegment}
-						submitSegment={submitSegment}
-						isPlacingRedLine={isPlacingRedLine}
-						isWaitingForOtherPlayers={isWaitingForOtherPlayers}
-						hasDrawnSomething={hasDrawnSomething}
-						isDrawing={isDrawing}
-					></GameButtons>
+						<div
+							className="absolute bottom-1 right-1 z-40 flex space-x-2 mx-5" // Position bottom-right within the game container, added flex and space-x-2 for buttons
+						>
+							<GameButtons
+								clearCanvas={clearCanvas}
+								isGameOver={isGameOver}
+								canDrawOrPlaceLine={canDrawOrPlaceLine}
+								handleDoneDrawing={handleDoneDrawing}
+								isLastSegment={isLastSegment}
+								canSubmitSegment={canSubmitSegment}
+								submitSegment={submitSegment}
+								isPlacingRedLine={isPlacingRedLine}
+								isWaitingForOtherPlayers={
+									isWaitingForOtherPlayers
+								}
+								hasDrawnSomething={hasDrawnSomething}
+								isDrawing={isDrawing}
+							></GameButtons>
+						</div>
+					</div>
 				</>
 			) : (
 				<GameOver

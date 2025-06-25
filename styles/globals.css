@@ -30,10 +30,10 @@ body {
 
 .game-buttons-container {
 	position: absolute; /* Position the container absolutely */
-	bottom: 50px; /* Distance from the bottom of its relative parent */
-	right: 5px; /* Distance from the right of its relative parent */
+	bottom: 20px; /* Distance from the bottom of its relative parent */
+	right: 1px; /* Distance from the right of its relative parent */
 	display: flex; /* Keep buttons in a row */
-	gap: 16px; /* Space between buttons (equivalent to Tailwind's space-x-4) */
+	gap: 16px;
 	z-index: 40; /* Ensure buttons are on top of other elements, higher than canvas z-indexes */
 }
 
