@@ -185,6 +185,7 @@ export default function GameRoom({
 
 	// Helper to get coordinates from mouse or touch events
 	const getCoordinates = useCallback((e, canvas) => {
+		e.preventDefault();
 		const rect = canvas.getBoundingClientRect();
 		// Use canvas.width and canvas.height directly for scaling, as they are already set to dynamic values
 		const scaleX = canvas.width / rect.width;
