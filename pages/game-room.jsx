@@ -217,7 +217,13 @@ export default function GameRoom({
 			if (!canvas) return;
 
 			const { x, y } = getCoordinates(e, canvas);
-
+			if (
+				currentSegmentIndex > 0 &&
+				scaledPreviousRedLineY !== null &&
+				y < scaledPreviousRedLineY
+			) {
+				return; // Do not start drawing if above the hidden area
+			}
 			setIsDrawing(true);
 			setLastX(x);
 			setLastY(y);
@@ -229,7 +235,14 @@ export default function GameRoom({
 				drawingContextRef.current.moveTo(x, y);
 			}
 		},
-		[canDrawOrPlaceLine, isGameOver, isPlacingRedLine, getCoordinates]
+		[
+			canDrawOrPlaceLine,
+			isGameOver,
+			isPlacingRedLine,
+			getCoordinates,
+			currentSegmentIndex,
+			scaledPreviousRedLineY,
+		]
 	);
 
 	const handleCanvasMove = useCallback(
@@ -242,7 +255,14 @@ export default function GameRoom({
 			if (!canvas) return;
 
 			const { x, y } = getCoordinates(e, canvas);
-
+			// Restrict drawing/line placement if currentSegmentIndex > 0 and y is above the scaledPreviousRedLineY
+			if (
+				currentSegmentIndex > 0 &&
+				scaledPreviousRedLineY !== null &&
+				y < scaledPreviousRedLineY
+			) {
+				return; // Do not draw or move line if above the hidden area
+			}
 			if (!isPlacingRedLine) {
 				// Drawing mode
 				if (!drawingContextRef.current) return;
@@ -270,6 +290,8 @@ export default function GameRoom({
 			drawRedLineOnOverlay,
 			getCoordinates,
 			dynamicCanvasHeight,
+			currentSegmentIndex,
+			scaledPreviousRedLineY,
 		]
 	);
 
