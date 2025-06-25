@@ -7,12 +7,16 @@ export default function Lobby({
 	joinExistingGame,
 }) {
 	return (
-		<>
+		<div className="mx-4 sm:mx-8 w-full flex flex-col items-center">
+			{' '}
+			{/* Outer wrapper for consistent margin */}
+			{/* The main lobby content container (formerly the direct child of the fragment) */}
 			<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg text-center">
 				Exquisite Corpse Game
 			</h1>
-
 			<div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full text-center space-y-6">
+				{' '}
+				{/* Removed mx-4/sm:mx-8 here */}
 				<h2 className="text-2xl font-semibold text-gray-800 mb-4">
 					Welcome!
 				</h2>
@@ -49,6 +53,6 @@ export default function Lobby({
 				</div>
 				<p className="text-red-500 text-md mt-4">{message}</p>
 			</div>
-		</>
+		</div>
 	);
 }
