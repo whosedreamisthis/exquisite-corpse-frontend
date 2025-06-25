@@ -542,6 +542,8 @@ export default function GameRoom({
 				<GameOver
 					finalArtwork={finalArtwork}
 					finalArtwork2={finalArtwork2}
+					dynamicCanvasWidth={dynamicCanvasWidth} // Pass dynamic canvas width
+					dynamicCanvasHeight={dynamicCanvasHeight}
 					handlePlayAgain={handlePlayAgain}
 				></GameOver>
 			)}

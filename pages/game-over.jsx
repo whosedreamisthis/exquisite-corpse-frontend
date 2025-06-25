@@ -2,6 +2,8 @@ export default function GameOver({
 	finalArtwork,
 	finalArtwork2,
 	handlePlayAgain,
+	dynamicCanvasWidth, // New prop
+	dynamicCanvasHeight, // New prop
 }) {
 	return (
 		<div className="text-center mt-5">
@@ -13,14 +15,24 @@ export default function GameOver({
 					<img
 						src={finalArtwork}
 						alt="Final Combined Artwork 1"
-						className="bg-white max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
+						className="bg-white border-4 border-purple-500 rounded-xl shadow-2xl block"
+						style={{
+							width: dynamicCanvasWidth,
+							height: dynamicCanvasHeight,
+							objectFit: 'contain', // Ensures the image fits within the bounds without stretching
+						}}
 					/>
 				)}
 				{finalArtwork2 && (
 					<img
 						src={finalArtwork2}
 						alt="Final Combined Artwork 2"
-						className="bg-white max-w-full h-auto border-4 border-purple-500 rounded-xl shadow-2xl block"
+						className="bg-white border-4 border-purple-500 rounded-xl shadow-2xl block"
+						style={{
+							width: dynamicCanvasWidth,
+							height: dynamicCanvasHeight,
+							objectFit: 'contain',
+						}}
 					/>
 				)}
 			</div>
