@@ -1,7 +1,7 @@
 // game-room.jsx
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import GameButtons from './game-buttons.jsx'; // Corrected import path
-import GameOver from './game-over.jsx'; // Corrected import path
+import GameButtons from './game-buttons'; // Corrected import path (removed .jsx)
+import GameOver from './game-over'; // Corrected import path (removed .jsx)
 
 const TOTAL_SEGMENTS = 4; // Define total segments here
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -89,72 +89,72 @@ export default function GameRoom({
 		}
 	}, [previousRedLineY, backendCanvasHeight, dynamicCanvasHeight]);
 
-	// Canvas setup: Initialize contexts for both canvases
+	// Canvas setup: Initialize contexts, size canvases, and draw received image
 	useEffect(() => {
 		const drawingCanvas = drawingCanvasRef.current;
 		const overlayCanvas = overlayCanvasRef.current;
+		let dCtx = drawingContextRef.current; // Get existing context if possible
+		let oCtx = overlayContextRef.current;
 
-		if (!drawingCanvas || !overlayCanvas) return;
+		if (!drawingCanvas || !overlayCanvas) return; // Ensure canvases exist
 
-		// Set canvas dimensions dynamically
+		// Always set canvas dimensions dynamically
 		drawingCanvas.width = dynamicCanvasWidth;
 		drawingCanvas.height = dynamicCanvasHeight;
 		overlayCanvas.width = dynamicCanvasWidth;
 		overlayCanvas.height = dynamicCanvasHeight;
 
-		// Set up drawing canvas context
-		const dCtx = drawingCanvas.getContext('2d');
-		dCtx.fillStyle = 'white'; // Set fill style to white
-		dCtx.fillRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Fill the canvas with white
-		dCtx.lineCap = 'round';
-		dCtx.strokeStyle = 'black';
-		dCtx.lineWidth = 5;
-		drawingContextRef.current = dCtx;
-
-		// Set up overlay canvas context (must be transparent)
-		const oCtx = overlayCanvas.getContext('2d');
-		overlayContextRef.current = oCtx;
-		// Ensure overlay is transparent
-		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Overlay remains transparent
-
-		// Clear drawing canvas initially if no image is present for the first segment
-		if (!receivedCanvasImage && currentSegmentIndex === 0) {
-			dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		// Initialize contexts if they don't already exist
+		if (!dCtx) {
+			dCtx = drawingCanvas.getContext('2d');
+			dCtx.lineCap = 'round';
+			dCtx.strokeStyle = 'black';
+			dCtx.lineWidth = 5;
+			drawingContextRef.current = dCtx;
 		}
-	}, [
-		drawingCanvasRef,
-		overlayCanvasRef,
-		receivedCanvasImage,
-		currentSegmentIndex,
-		dynamicCanvasWidth,
-		dynamicCanvasHeight,
-	]);
+		if (!oCtx) {
+			oCtx = overlayCanvas.getContext('2d');
+			overlayContextRef.current = oCtx;
+		}
 
-	// Draw received canvas image when it updates
-	useEffect(() => {
-		if (receivedCanvasImage && drawingCanvasRef.current) {
+		// Always clear and fill drawing canvas with a white background
+		dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		dCtx.fillStyle = 'white';
+		dCtx.fillRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+
+		// Always clear overlay canvas (it should remain transparent)
+		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+
+		// Draw received canvas image if available
+		if (receivedCanvasImage) {
 			const image = new Image();
 			image.onload = () => {
-				const ctx = drawingCanvasRef.current.getContext('2d');
-				ctx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight); // Clear before drawing new base image
-				ctx.drawImage(
-					image,
-					0,
-					0,
-					dynamicCanvasWidth,
-					dynamicCanvasHeight
-				); // Draw image scaled to canvas size
+				// Ensure context and dimensions are still valid before drawing
+				if (
+					drawingContextRef.current &&
+					drawingCanvasRef.current.width === dynamicCanvasWidth
+				) {
+					drawingContextRef.current.drawImage(
+						image,
+						0,
+						0,
+						dynamicCanvasWidth,
+						dynamicCanvasHeight
+					); // Draw image scaled to current canvas size
+				}
 			};
 			image.onerror = (error) => {
 				console.error('Error loading received canvas image:', error);
 			};
 			image.src = receivedCanvasImage;
-		} else if (!receivedCanvasImage && drawingCanvasRef.current) {
-			// Clear canvas if receivedCanvasImage becomes null
-			const ctx = drawingCanvasRef.current.getContext('2d');
-			ctx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
 		}
-	}, [receivedCanvasImage, dynamicCanvasWidth, dynamicCanvasHeight]);
+	}, [
+		drawingCanvasRef,
+		overlayCanvasRef,
+		receivedCanvasImage,
+		dynamicCanvasWidth,
+		dynamicCanvasHeight,
+	]);
 
 	// Function to draw the temporary red line on the overlay canvas
 	const drawRedLineOnOverlay = useCallback(
@@ -217,6 +217,8 @@ export default function GameRoom({
 			if (!canvas) return;
 
 			const { x, y } = getCoordinates(e, canvas);
+
+			// Restrict drawing/line placement if currentSegmentIndex > 0 and y is above the scaledPreviousRedLineY
 			if (
 				currentSegmentIndex > 0 &&
 				scaledPreviousRedLineY !== null &&
@@ -224,6 +226,7 @@ export default function GameRoom({
 			) {
 				return; // Do not start drawing if above the hidden area
 			}
+
 			setIsDrawing(true);
 			setLastX(x);
 			setLastY(y);
@@ -255,6 +258,7 @@ export default function GameRoom({
 			if (!canvas) return;
 
 			const { x, y } = getCoordinates(e, canvas);
+
 			// Restrict drawing/line placement if currentSegmentIndex > 0 and y is above the scaledPreviousRedLineY
 			if (
 				currentSegmentIndex > 0 &&
@@ -263,6 +267,7 @@ export default function GameRoom({
 			) {
 				return; // Do not draw or move line if above the hidden area
 			}
+
 			if (!isPlacingRedLine) {
 				// Drawing mode
 				if (!drawingContextRef.current) return;
@@ -468,7 +473,7 @@ export default function GameRoom({
 
 						{/* Message displayed within the canvas container */}
 						<div
-							className="absolute top-2 left-2 p-2 rounded-lg text-gray-800 text-lg font-medium bg-opacity-75 z-40"
+							className="absolute top-2 left-2 p-2 rounded-lg text-gray-800 text-lg font-medium bg-white bg-opacity-75 z-40"
 							style={
 								{
 									// This div is now inside the canvas container, so top/left are relative to it
@@ -494,7 +499,7 @@ export default function GameRoom({
 								currentSegmentIndex > 0 &&
 								scaledPreviousRedLineY !== null && ( // Use scaledPreviousRedLineY
 									<div
-										className="absolute top-0 left-0 w-full bg-indigo-300 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
+										className="absolute top-0 left-0 w-full bg-indigo-300 bg-opacity-75 flex items-center justify-center text-gray-800 text-xl font-semibold" // Changed bg-gray-200 to bg-indigo-300 and text-gray-600 to text-gray-800
 										style={{
 											// Cover everything from the top down to the previous player's red line
 											height: `${scaledPreviousRedLineY}px`, // Apply scaled value here
@@ -502,7 +507,7 @@ export default function GameRoom({
 											overflow: 'hidden',
 										}}
 									>
-										Hidden
+										Previous Segment Hidden
 									</div>
 								)}
 						</div>
@@ -540,7 +545,7 @@ export default function GameRoom({
 						)}
 
 						<div
-							className="absolute bottom-1 right-1 z-40 flex space-x-2 mx-5" // Position bottom-right within the game container, added flex and space-x-2 for buttons
+							className="absolute bottom-2 right-2 z-40 flex space-x-2" // Position bottom-right within the game container, added flex and space-x-2 for buttons
 						>
 							<GameButtons
 								clearCanvas={clearCanvas}
