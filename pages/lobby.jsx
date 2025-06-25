@@ -8,7 +8,7 @@ export default function Lobby({
 }) {
 	return (
 		<>
-			<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg">
+			<h1 className="text-5xl font-extrabold text-purple-800 mb-6 drop-shadow-lg text-center">
 				Exquisite Corpse Game
 			</h1>
 
