@@ -285,7 +285,7 @@ export default function ExquisiteCorpseGame() {
 
 	return (
 		<div
-			className={`min-h-screen bg-purple-300 flex flex-col items-center justify-center font-sans  ${
+			className={`min-h-screen bg-indigo-200 flex flex-col items-center justify-center font-sans  ${
 				!isGameOver ? 'overflow-hidden' : ''
 			}`}
 		>
