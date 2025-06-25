@@ -472,7 +472,7 @@ export default function GameRoom({
 								currentSegmentIndex > 0 &&
 								scaledPreviousRedLineY !== null && ( // Use scaledPreviousRedLineY
 									<div
-										className="absolute top-0 left-0 w-full bg-gray-200 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
+										className="absolute top-0 left-0 w-full bg-indigo-300 bg-opacity-75 flex items-center justify-center text-gray-600 text-xl font-semibold"
 										style={{
 											// Cover everything from the top down to the previous player's red line
 											height: `${scaledPreviousRedLineY}px`, // Apply scaled value here
@@ -480,7 +480,7 @@ export default function GameRoom({
 											overflow: 'hidden',
 										}}
 									>
-										Previous Segment Hidden
+										Hidden
 									</div>
 								)}
 						</div>
