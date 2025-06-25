@@ -38,7 +38,7 @@ export default function GameOver({
 			</div>
 			<button
 				onClick={handlePlayAgain}
-				className="px-8 py-4 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
+				className="px-8 py-4 mb-8 text-xl font-bold rounded-lg bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-colors transform hover:scale-105"
 			>
 				Play Again
 			</button>
