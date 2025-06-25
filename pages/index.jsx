@@ -4,8 +4,9 @@ import axios from 'axios'; // Import axios for HTTP requests
 import GameRoom from './game-room.jsx'; // Import the new GameRoom component
 import Lobby from './lobby.jsx'; // Corrected import path
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
-const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
-//const WS_URL = 'https://satin-lumbar-book.glitch.me';
+//const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
+const WS_URL = 'wss://satin-lumbar-book.glitch.me';
+const BASE_URL = 'https://satin-lumbar-book.glitch.me';
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -233,10 +234,7 @@ export default function ExquisiteCorpseGame() {
 	// --- Game Setup / Join ---
 	const createNewGame = async () => {
 		try {
-			const response = await axios.post(
-				'http://localhost:8080/api/createGame',
-				{}
-			);
+			const response = await axios.post(`${BASE_URL}/api/createGame`, {});
 			const { gameCode: newGameCode } = response.data;
 			setGeneratedGameCode(newGameCode);
 			setGameCode('');
