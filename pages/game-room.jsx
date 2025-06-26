@@ -682,6 +682,7 @@ export default function GameRoom({
 								}
 								hasDrawnSomething={hasDrawnSomething} // Now derived from drawingHistory.length
 								isDrawing={isDrawingRef.current} // Use ref value
+								hasUndoneStrokes={undoneStrokes.length > 0} // NEW: Pass if there are undone strokes
 							></GameButtons>
 						</div>
 					</div>

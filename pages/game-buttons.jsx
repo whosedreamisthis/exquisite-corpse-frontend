@@ -11,6 +11,7 @@ export default function GameButtons({
 	isWaitingForOtherPlayers,
 	hasDrawnSomething,
 	isDrawing,
+	hasUndoneStrokes,
 }) {
 	return (
 		<div className="game-buttons-container">
@@ -60,6 +61,7 @@ export default function GameButtons({
                                 ${
 									canDrawOrPlaceLine &&
 									!isGameOver &&
+									hasUndoneStrokes &&
 									!isPlacingRedLine &&
 									!isDrawing
 										? 'bg-purple-500 text-white shadow-lg hover:bg-purple-600'
@@ -68,6 +70,7 @@ export default function GameButtons({
 				disabled={
 					!canDrawOrPlaceLine ||
 					isGameOver ||
+					!hasUndoneStrokes ||
 					isPlacingRedLine ||
 					isDrawing
 				} // Redo should be enabled if there's something to redo
