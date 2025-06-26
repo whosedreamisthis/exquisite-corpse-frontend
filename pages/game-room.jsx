@@ -531,7 +531,7 @@ export default function GameRoom({
 								canDrawOrPlaceLine
 									? 'cursor-crosshair'
 									: 'cursor-not-allowed'
-							}`}
+							} touch-none`}
 							style={{ zIndex: 2 }}
 						></canvas>
 
