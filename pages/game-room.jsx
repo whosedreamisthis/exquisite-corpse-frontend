@@ -474,7 +474,7 @@ export default function GameRoom({
 
 						{/* Message displayed within the canvas container */}
 						<div
-							className="absolute top-2 left-2 p-2 rounded-lg text-gray-800 text-lg font-medium bg-white bg-opacity-75 z-40"
+							className="absolute top-1 left-2 p-2 rounded-lg text-gray-800 text-lg font-medium bg-opacity-75 z-40"
 							style={
 								{
 									// This div is now inside the canvas container, so top/left are relative to it

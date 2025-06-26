@@ -17,7 +17,7 @@ export default function GameButtons({
 			{/* Changed: Added this class and removed Tailwind positioning */}
 			<button
 				onClick={clearCanvas}
-				className={`px-2 py-2  text-lg font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+				className={`px-2 py-2  text-sm font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                 ${
 									canDrawOrPlaceLine && !isGameOver
 										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
