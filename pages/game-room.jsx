@@ -652,10 +652,18 @@ export default function GameRoom({
 							onMouseMove={handleCanvasMove}
 							onMouseUp={handleCanvasEnd}
 							onMouseOut={handleMouseOut}
-							onTouchStart={handleCanvasStart}
-							onTouchMove={handleCanvasMove}
-							onTouchEnd={handleCanvasEnd}
-							onTouchCancel={handleCanvasEnd}
+							onTouchStart={handleCanvasStart} // This already calls e.preventDefault() via getCoordinates
+							onTouchMove={handleCanvasMove} // This already calls e.preventDefault() via getCoordinates
+							onTouchEnd={(e) => {
+								// Explicitly prevent default on touch end
+								e.preventDefault();
+								handleCanvasEnd();
+							}}
+							onTouchCancel={(e) => {
+								// Explicitly prevent default on touch cancel
+								e.preventDefault();
+								handleCanvasEnd();
+							}}
 							className={`relative w-full h-full rounded-lg border-2 border-solid border-gray-400 box-border ${
 								// Added box-border
 								canDrawOrPlaceLine
