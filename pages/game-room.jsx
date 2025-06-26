@@ -396,7 +396,15 @@ export default function GameRoom({
 					dynamicCanvasHeight
 				); // Clear overlay
 
-				if (pathPoints.current.length > 0) {
+				// NEW: Require a minimum number of points for a stroke to be saved.
+				// This helps filter out accidental clicks that don't involve actual drawing.
+				// A single point (length 1) registers a dot. A length of 2 or more implies a drag.
+				// Setting it to 2 means the user needs to drag at least 1px for a stroke to be saved.
+				const MIN_STROKE_POINTS = 2;
+
+				if (pathPoints.current.length >= MIN_STROKE_POINTS) {
+					// Changed condition
+
 					const newStroke = {
 						...currentStrokeSettings.current,
 						points: [...pathPoints.current], // Deep copy points
