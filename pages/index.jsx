@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import axios from 'axios'; // Import axios for HTTP requests
 import GameRoom from './game-room.jsx'; // Import the new GameRoom component
 import Lobby from './lobby.jsx'; // Corrected import path
+import Loader from './loader';
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
 //const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
 //const BASE_URL = 'http://localhost:8080';
@@ -47,6 +48,7 @@ export default function ExquisiteCorpseGame() {
 	const [currentPlayersWsId, setCurrentPlayersWsId] = useState(null); // State to store the player's WS ID from the server
 	const [dynamicCanvasWidth, setDynamicCanvasWidth] = useState(0);
 	const [dynamicCanvasHeight, setDynamicCanvasHeight] = useState(0);
+	const [isLoading, setIsLoading] = useState(false);
 
 	// Dynamically update canvas size
 	useEffect(() => {
@@ -235,7 +237,9 @@ export default function ExquisiteCorpseGame() {
 	// --- Game Setup / Join ---
 	const createNewGame = async () => {
 		try {
+			setIsLoading(true);
 			const response = await axios.post(`${BASE_URL}/api/createGame`, {});
+			setIsLoading(false);
 			const { gameCode: newGameCode } = response.data;
 			setGeneratedGameCode(newGameCode);
 			setGameCode('');
@@ -290,14 +294,16 @@ export default function ExquisiteCorpseGame() {
 		>
 			{!hasJoinedGame ? (
 				// Initial screen: Join or Create
-
-				<Lobby
-					message={message}
-					gameCode={gameCode}
-					setGameCode={setGameCode}
-					createNewGame={createNewGame}
-					joinExistingGame={joinExistingGame}
-				/>
+				<>
+					{isLoading && <Loader />}
+					<Lobby
+						message={message}
+						gameCode={gameCode}
+						setGameCode={setGameCode}
+						createNewGame={createNewGame}
+						joinExistingGame={joinExistingGame}
+					/>
+				</>
 			) : (
 				// Game screen once a game is joined/created, rendered by GameRoom
 				<GameRoom
