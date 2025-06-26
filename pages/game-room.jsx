@@ -116,7 +116,12 @@ export default function GameRoom({
 			oCtx = overlayCanvas.getContext('2d');
 			overlayContextRef.current = oCtx;
 		}
-
+		// --- NEW: Calculate and set dynamic lineWidth ---
+		const BASE_LINE_WIDTH = 5; // The desired line width at BACKEND_CANVAS_HEIGHT
+		const scaleFactorForLineWidth =
+			dynamicCanvasHeight / backendCanvasHeight;
+		dCtx.lineWidth = BASE_LINE_WIDTH * scaleFactorForLineWidth;
+		// -----------------------------------------------
 		// Always clear and fill drawing canvas with a white background
 		dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
 		dCtx.fillStyle = 'white';
@@ -508,7 +513,7 @@ export default function GameRoom({
 											overflow: 'hidden',
 										}}
 									>
-										Previous Segment Hidden
+										Hidden
 									</div>
 								)}
 						</div>
