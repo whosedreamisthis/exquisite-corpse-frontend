@@ -1,5 +1,6 @@
 export default function GameButtons({
-	clearCanvas,
+	handleUndo, // NEW prop for undo
+	handleRedo, // NEW prop for redo
 	isGameOver,
 	canDrawOrPlaceLine,
 	handleDoneDrawing,
@@ -13,18 +14,27 @@ export default function GameButtons({
 }) {
 	return (
 		<div className="game-buttons-container">
-			{' '}
-			{/* Changed: Added this class and removed Tailwind positioning */}
+			{/* Undo Button */}
 			<button
-				onClick={clearCanvas}
-				className={`px-2 py-2  text-sm font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+				onClick={handleUndo}
+				className={`px-2 py-2 text-sm font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
                                 ${
-									canDrawOrPlaceLine && !isGameOver
-										? 'bg-red-500 text-white shadow-lg hover:bg-red-600'
+									canDrawOrPlaceLine &&
+									!isGameOver &&
+									hasDrawnSomething &&
+									!isPlacingRedLine &&
+									!isDrawing
+										? 'bg-orange-500 text-white shadow-lg hover:bg-orange-600'
 										: 'bg-gray-400 cursor-not-allowed shadow-inner'
 								}`}
-				disabled={!canDrawOrPlaceLine || isGameOver}
-				title="Clear Canvas" // Add a title for accessibility
+				disabled={
+					!canDrawOrPlaceLine ||
+					isGameOver ||
+					!hasDrawnSomething ||
+					isPlacingRedLine ||
+					isDrawing
+				}
+				title="Undo Last Stroke"
 			>
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
@@ -37,12 +47,49 @@ export default function GameButtons({
 					<path
 						strokeLinecap="round"
 						strokeLinejoin="round"
-						d="M6 18L18 6M6 6l12 12"
+						d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
 					/>
 				</svg>
-				<span className="sr-only">Clear Canvas</span>{' '}
-				{/* For screen readers */}
+				<span className="sr-only">Undo</span>
 			</button>
+
+			{/* Redo Button */}
+			<button
+				onClick={handleRedo}
+				className={`px-2 py-2 text-sm font-bold rounded-lg transition-all duration-300 ease-in-out transform hover:scale-105 flex items-center justify-center
+                                ${
+									canDrawOrPlaceLine &&
+									!isGameOver &&
+									!isPlacingRedLine &&
+									!isDrawing
+										? 'bg-purple-500 text-white shadow-lg hover:bg-purple-600'
+										: 'bg-gray-400 cursor-not-allowed shadow-inner'
+								}`}
+				disabled={
+					!canDrawOrPlaceLine ||
+					isGameOver ||
+					isPlacingRedLine ||
+					isDrawing
+				} // Redo should be enabled if there's something to redo
+				title="Redo Last Undone Stroke"
+			>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+					strokeWidth={2.5}
+					stroke="currentColor"
+					className="w-7 h-7"
+				>
+					<path
+						strokeLinecap="round"
+						strokeLinejoin="round"
+						d="M15 9l6 6m0 0l-6 6m6-6H9a6 6 0 010-12h3"
+					/>
+				</svg>
+				<span className="sr-only">Redo</span>
+			</button>
+
 			{/* Conditionally show Done Drawing or Submit Segment button */}
 			{!isLastSegment &&
 				!isPlacingRedLine && ( // Show "Done Drawing" if not last segment and not placing line

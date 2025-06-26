@@ -36,12 +36,11 @@ export default function GameRoom({
 	const overlayCanvasRef = useRef(null); // Overlay canvas for temporary red line
 	const overlayContextRef = useRef(null);
 
-	const [isDrawing, setIsDrawing] = useState(false);
-	const [lastX, setLastX] = useState(0); // Not strictly needed with two canvases, but kept for consistency
-	const [lastY, setLastY] = useState(0); // Not strictly needed, but kept for consistency
-
-	// New state to track if any drawing has occurred in the current segment
-	const [hasDrawnSomething, setHasDrawnSomething] = useState(false);
+	// Drawing state using refs for performance
+	const isDrawingRef = useRef(false); // Changed from useState to useRef
+	const lastPoint = useRef({ x: 0, y: 0 }); // To store last point, not strictly needed as state
+	const pathPoints = useRef([]); // Stores points for the current stroke being drawn
+	const currentStrokeSettings = useRef({}); // Stores color, lineWidth for the current stroke
 
 	// New state for red line positioning
 	const [isPlacingRedLine, setIsPlacingRedLine] = useState(false);
@@ -51,6 +50,13 @@ export default function GameRoom({
 
 	// State for the scaled previous red line Y position for the overlay
 	const [scaledPreviousRedLineY, setScaledPreviousRedLineY] = useState(null);
+
+	// NEW: States for Undo/Redo history
+	const [drawingHistory, setDrawingHistory] = useState([]); // Array of completed stroke objects
+	const [undoneStrokes, setUndoneStrokes] = useState([]); // Array of strokes for redo functionality
+	// New state to track if any drawing has occurred in the current segment
+	// This now reflects if there's anything in drawingHistory
+	const hasDrawnSomething = drawingHistory.length > 0;
 
 	// Effect to scale previousRedLineY when dynamicCanvasHeight or previousRedLineY changes
 	useEffect(() => {
@@ -89,11 +95,93 @@ export default function GameRoom({
 		}
 	}, [previousRedLineY, backendCanvasHeight, dynamicCanvasHeight]);
 
-	// Canvas setup: Initialize contexts, size canvases, and draw received image
+	// NEW: Function to redraw the entire canvas from history
+	const redrawCanvas = useCallback(() => {
+		const dCtx = drawingContextRef.current;
+		const drawingCanvas = drawingCanvasRef.current;
+
+		if (!dCtx || !drawingCanvas) return;
+
+		// Clear the entire canvas first
+		dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		dCtx.fillStyle = 'white';
+		dCtx.fillRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+
+		// Draw the received previous segment image if it exists
+		if (receivedCanvasImage) {
+			const image = new Image();
+			image.onload = () => {
+				if (
+					drawingContextRef.current &&
+					drawingCanvasRef.current.width === dynamicCanvasWidth
+				) {
+					drawingContextRef.current.drawImage(
+						image,
+						0,
+						0,
+						dynamicCanvasWidth,
+						dynamicCanvasHeight
+					);
+					// After drawing the background image, draw all historical strokes
+					drawingHistory.forEach((stroke) => {
+						drawStroke(
+							dCtx,
+							stroke,
+							dynamicCanvasWidth,
+							dynamicCanvasHeight
+						);
+					});
+				}
+			};
+			image.onerror = (error) => {
+				console.error(
+					'Error loading received canvas image for redraw:',
+					error
+				);
+			};
+			image.src = receivedCanvasImage;
+		} else {
+			// If no received image, just draw the historical strokes
+			drawingHistory.forEach((stroke) => {
+				drawStroke(
+					dCtx,
+					stroke,
+					dynamicCanvasWidth,
+					dynamicCanvasHeight
+				);
+			});
+		}
+	}, [
+		dynamicCanvasWidth,
+		dynamicCanvasHeight,
+		receivedCanvasImage,
+		drawingHistory,
+	]);
+
+	// Helper function to draw a single stroke (moved from outside for clarity)
+	const drawStroke = useCallback((ctx, stroke) => {
+		if (!ctx || !stroke || !stroke.points || stroke.points.length === 0)
+			return;
+
+		ctx.strokeStyle = stroke.color;
+		ctx.lineWidth = stroke.lineWidth;
+		ctx.lineCap = stroke.lineCap || 'round';
+		ctx.lineJoin = stroke.lineJoin || 'round';
+
+		ctx.beginPath();
+		ctx.moveTo(stroke.points[0].x, stroke.points[0].y);
+
+		for (let i = 1; i < stroke.points.length; i++) {
+			ctx.lineTo(stroke.points[i].x, stroke.points[i].y);
+		}
+		ctx.stroke();
+	}, []);
+
+	// Canvas setup: Initialize contexts, size canvases, and initial redraw
 	useEffect(() => {
 		const drawingCanvas = drawingCanvasRef.current;
 		const overlayCanvas = overlayCanvasRef.current;
-		let dCtx = drawingContextRef.current; // Get existing context if possible
+		let dCtx = drawingContextRef.current;
 		let oCtx = overlayContextRef.current;
 
 		if (!drawingCanvas || !overlayCanvas) return; // Ensure canvases exist
@@ -108,58 +196,41 @@ export default function GameRoom({
 		if (!dCtx) {
 			dCtx = drawingCanvas.getContext('2d');
 			dCtx.lineCap = 'round';
+			dCtx.lineJoin = 'round'; // Added lineJoin for smoother corners
 			dCtx.strokeStyle = 'black';
-			dCtx.lineWidth = 5;
 			drawingContextRef.current = dCtx;
 		}
 		if (!oCtx) {
 			oCtx = overlayCanvas.getContext('2d');
+			oCtx.lineCap = 'round';
+			oCtx.lineJoin = 'round'; // Added lineJoin for smoother corners
+			oCtx.strokeStyle = 'black'; // Overlay context also needs stroke style
 			overlayContextRef.current = oCtx;
 		}
-		// --- NEW: Calculate and set dynamic lineWidth ---
-		const BASE_LINE_WIDTH = 5; // The desired line width at BACKEND_CANVAS_HEIGHT
+
+		// Apply dynamic line width
+		const BASE_LINE_WIDTH = 5; // The desired line width at backendCanvasHeight
 		const scaleFactorForLineWidth =
 			dynamicCanvasHeight / backendCanvasHeight;
 		dCtx.lineWidth = BASE_LINE_WIDTH * scaleFactorForLineWidth;
-		// -----------------------------------------------
-		// Always clear and fill drawing canvas with a white background
-		dCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
-		dCtx.fillStyle = 'white';
-		dCtx.fillRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
+		oCtx.lineWidth = BASE_LINE_WIDTH * scaleFactorForLineWidth; // Apply to overlay context too
 
-		// Always clear overlay canvas (it should remain transparent)
+		// Initial clear of the overlay canvas (it should remain transparent)
 		oCtx.clearRect(0, 0, dynamicCanvasWidth, dynamicCanvasHeight);
 
-		// Draw received canvas image if available
-		if (receivedCanvasImage) {
-			const image = new Image();
-			image.onload = () => {
-				// Ensure context and dimensions are still valid before drawing
-				if (
-					drawingContextRef.current &&
-					drawingCanvasRef.current.width === dynamicCanvasWidth
-				) {
-					drawingContextRef.current.drawImage(
-						image,
-						0,
-						0,
-						dynamicCanvasWidth,
-						dynamicCanvasHeight
-					); // Draw image scaled to current canvas size
-				}
-			};
-			image.onerror = (error) => {
-				console.error('Error loading received canvas image:', error);
-			};
-			image.src = receivedCanvasImage;
-		}
+		// Initial redraw of the main canvas based on received image and current history
+		redrawCanvas();
 	}, [
-		drawingCanvasRef,
-		overlayCanvasRef,
-		receivedCanvasImage,
 		dynamicCanvasWidth,
 		dynamicCanvasHeight,
+		backendCanvasHeight,
+		redrawCanvas, // Depend on redrawCanvas so it updates if its dependencies change
 	]);
+
+	// Effect to trigger redraw when drawingHistory or receivedCanvasImage changes
+	useEffect(() => {
+		redrawCanvas();
+	}, [drawingHistory, receivedCanvasImage, redrawCanvas]); // Ensure redraws on history changes
 
 	// Function to draw the temporary red line on the overlay canvas
 	const drawRedLineOnOverlay = useCallback(
@@ -233,15 +304,21 @@ export default function GameRoom({
 				return; // Do not start drawing if above the hidden area
 			}
 
-			setIsDrawing(true);
-			setLastX(x);
-			setLastY(y);
+			isDrawingRef.current = true; // Set ref value
+			lastPoint.current = { x, y }; // Store last point in ref
 
 			if (!isPlacingRedLine) {
-				// Start drawing path on the main drawing canvas
-				if (!drawingContextRef.current) return;
-				drawingContextRef.current.beginPath();
-				drawingContextRef.current.moveTo(x, y);
+				// Start a new path for drawing
+				pathPoints.current = [{ x, y }]; // Initialize path points
+				currentStrokeSettings.current = {
+					color: drawingContextRef.current.strokeStyle,
+					lineWidth: drawingContextRef.current.lineWidth,
+					lineCap: drawingContextRef.current.lineCap,
+					lineJoin: drawingContextRef.current.lineJoin,
+				};
+				// Begin path on the overlay canvas for real-time feedback
+				overlayContextRef.current.beginPath();
+				overlayContextRef.current.moveTo(x, y);
 			}
 		},
 		[
@@ -256,7 +333,9 @@ export default function GameRoom({
 
 	const handleCanvasMove = useCallback(
 		(e) => {
-			if (!isDrawing || !canDrawOrPlaceLine || isGameOver) return;
+			// Use isDrawingRef.current to check drawing state
+			if (!isDrawingRef.current || !canDrawOrPlaceLine || isGameOver)
+				return;
 
 			e.preventDefault(); // Prevent scrolling on touch devices
 
@@ -275,14 +354,12 @@ export default function GameRoom({
 			}
 
 			if (!isPlacingRedLine) {
-				// Drawing mode
-				if (!drawingContextRef.current) return;
-				drawingContextRef.current.lineTo(x, y);
-				drawingContextRef.current.stroke();
-				setHasDrawnSomething(true); // User has drawn something
+				// Drawing mode - draw on overlay
+				overlayContextRef.current.lineTo(x, y);
+				overlayContextRef.current.stroke();
+				pathPoints.current.push({ x, y }); // Add point to current stroke's path
 			} else {
 				// Red line placing mode
-				// Constrain redLineY within canvas bounds
 				const newRedLineY = Math.max(
 					0,
 					Math.min(dynamicCanvasHeight, y)
@@ -290,11 +367,9 @@ export default function GameRoom({
 				setRedLineY(newRedLineY); // Update the red line's Y position
 				drawRedLineOnOverlay(newRedLineY); // Redraw the line
 			}
-			setLastX(x);
-			setLastY(y);
+			lastPoint.current = { x, y }; // Update last point in ref
 		},
 		[
-			isDrawing,
 			canDrawOrPlaceLine,
 			isGameOver,
 			isPlacingRedLine,
@@ -309,58 +384,93 @@ export default function GameRoom({
 	const handleCanvasEnd = useCallback(() => {
 		if (!canDrawOrPlaceLine || isGameOver) return;
 
-		if (isDrawing) {
-			// If we were in drawing mode, close the path
-			if (drawingContextRef.current && !isPlacingRedLine) {
-				drawingContextRef.current.closePath();
+		if (isDrawingRef.current) {
+			// Use ref value
+			if (!isPlacingRedLine) {
+				// For drawing mode, complete the stroke and add to history
+				overlayContextRef.current.closePath(); // Close path on overlay
+				overlayContextRef.current.clearRect(
+					0,
+					0,
+					dynamicCanvasWidth,
+					dynamicCanvasHeight
+				); // Clear overlay
+
+				if (pathPoints.current.length > 0) {
+					const newStroke = {
+						...currentStrokeSettings.current,
+						points: [...pathPoints.current], // Deep copy points
+					};
+					setDrawingHistory((prevHistory) => [
+						...prevHistory,
+						newStroke,
+					]);
+					setUndoneStrokes([]); // Clear redo history when a new stroke is added
+				}
+			} else {
+				// Red line placing mode ends, no additional action needed beyond current state
+				// The red line remains visible on the overlay until cleared by button actions
 			}
-			setIsDrawing(false);
+			isDrawingRef.current = false; // Reset ref value
+			pathPoints.current = []; // Reset current path for next stroke
 		}
-	}, [canDrawOrPlaceLine, isGameOver, isDrawing, isPlacingRedLine]);
+	}, [
+		canDrawOrPlaceLine,
+		isGameOver,
+		isPlacingRedLine,
+		dynamicCanvasWidth,
+		dynamicCanvasHeight,
+	]);
 
 	// Use onMouseOut to also stop drawing or placing line if mouse leaves canvas
 	const handleMouseOut = useCallback(() => {
-		if (isDrawing && !isPlacingRedLine) {
-			// If actively drawing and not placing line
+		if (isDrawingRef.current && !isPlacingRedLine) {
+			// Check ref value
 			handleCanvasEnd(); // Stop drawing
-		} else if (isPlacingRedLine && isDrawing) {
+		} else if (isPlacingRedLine && isDrawingRef.current) {
+			// Check ref value
 			// If dragging the line and mouse goes out
-			setIsDrawing(false); // Stop the "drag" state for the line
+			isDrawingRef.current = false; // Stop the "drag" state for the line
 			// The red line remains visible where it was last
 		}
-	}, [isDrawing, isPlacingRedLine, handleCanvasEnd]);
+	}, [isPlacingRedLine, handleCanvasEnd]);
+
+	// NEW: Undo last drawing stroke
+	const handleUndo = useCallback(() => {
+		setDrawingHistory((prevHistory) => {
+			if (prevHistory.length > 0) {
+				const lastStroke = prevHistory[prevHistory.length - 1];
+				setUndoneStrokes((prevUndone) => [...prevUndone, lastStroke]); // Add to redo stack
+				return prevHistory.slice(0, prevHistory.length - 1); // Remove last stroke
+			}
+			return prevHistory;
+		});
+	}, []);
+
+	// NEW: Redo last undone stroke
+	const handleRedo = useCallback(() => {
+		setUndoneStrokes((prevUndone) => {
+			if (prevUndone.length > 0) {
+				const redoneStroke = prevUndone[prevUndone.length - 1];
+				setDrawingHistory((prevHistory) => [
+					...prevHistory,
+					redoneStroke,
+				]); // Add back to drawing history
+				return prevUndone.slice(0, prevUndone.length - 1); // Remove from redo stack
+			}
+			return prevUndone;
+		});
+	}, []);
 
 	// --- Action Buttons ---
-	const clearCanvas = () => {
-		const drawingCanvas = drawingCanvasRef.current;
-		const drawingContext = drawingContextRef.current;
-		if (drawingCanvas && drawingContext) {
-			drawingContext.clearRect(
-				0,
-				0,
-				dynamicCanvasWidth,
-				dynamicCanvasHeight
-			); // Clear the entire drawing canvas
-			// If there's a previous segment image, re-draw it after clearing
-			if (receivedCanvasImage) {
-				const img = new Image();
-				img.onload = () => {
-					drawingContext.drawImage(
-						img,
-						0,
-						0,
-						dynamicCanvasWidth,
-						dynamicCanvasHeight
-					);
-				};
-				img.src = receivedCanvasImage;
-			}
-		}
-		clearRedLineFromOverlay(); // Also clear the red line from the overlay
-		setIsPlacingRedLine(false); // Exit line placement mode if clearing
-		setRedLineY(dynamicCanvasHeight); // Reset red line position
-		setHasDrawnSomething(false); // Reset drawing flag
-	};
+	// The `clearCanvas` prop to GameButtons is replaced by `handleUndo` and `handleRedo`.
+	// The actual "clear all" would be achieved by repeatedly pressing undo or starting a new segment.
+	// For a full clear button that ignores history:
+	// const clearAllDrawing = useCallback(() => {
+	//     setDrawingHistory([]);
+	//     setUndoneStrokes([]);
+	//     redrawCanvas(); // Force redraw to clear
+	// }, [redrawCanvas]);
 
 	const submitSegment = () => {
 		if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
@@ -372,8 +482,8 @@ export default function GameRoom({
 			!canDrawOrPlaceLine ||
 			isWaitingForOtherPlayers ||
 			isGameOver ||
-			(!isPlacingRedLine && !isLastSegment && hasDrawnSomething) || // Must be in placing mode if not the last segment and has drawn
-			(!hasDrawnSomething && !isPlacingRedLine) // Must have drawn something OR be in placing mode
+			(!isPlacingRedLine && !isLastSegment && !hasDrawnSomething) || // Must be in placing mode if not the last segment and has drawn OR must have drawn something
+			(!hasDrawnSomething && !isPlacingRedLine && !isLastSegment) // If not last segment, must have drawn or be placing line
 		) {
 			setMessage(
 				'Cannot submit: Not your turn, game over, or conditions not met.'
@@ -382,6 +492,7 @@ export default function GameRoom({
 		}
 
 		// Get the current canvas data as a Data URL (PNG format for transparency)
+		// Ensure the canvas reflects the current drawingHistory state before submitting
 		const currentCanvasData =
 			drawingCanvasRef.current.toDataURL('image/png');
 
@@ -410,11 +521,14 @@ export default function GameRoom({
 				playerId: currentPlayersWsId, // Use the state variable for player ID
 			})
 		);
-		setIsDrawing(false); // Stop drawing
+		isDrawingRef.current = false; // Stop drawing ref
 		setIsWaitingForOtherPlayers(true); // This state is now managed by parent based on WS message
 		setCanDrawOrPlaceLine(false); // This state is now managed by parent based on WS message
-		setHasDrawnSomething(false); // Reset drawing flag for next turn
-		setIsPlacingRedLine(false); // Exit line placing mode after submission
+		// Reset drawing history and red line state for the next segment
+		setDrawingHistory([]);
+		setUndoneStrokes([]);
+		setIsPlacingRedLine(false);
+		setRedLineY(dynamicCanvasHeight); // Reset red line position
 		clearRedLineFromOverlay(); // Clear the red line from the overlay after submission
 	};
 
@@ -429,9 +543,9 @@ export default function GameRoom({
 		}
 
 		// Ensure drawing is stopped and path is closed (if it wasn't already)
-		setIsDrawing(false); // Ensure drawing state is false
+		isDrawingRef.current = false; // Ensure drawing state is false
 		if (drawingContextRef.current) {
-			drawingContextRef.current.closePath();
+			// Path closing isn't strictly needed if managing by points
 		}
 
 		// Transition to red line placement mode
@@ -443,7 +557,7 @@ export default function GameRoom({
 		drawRedLineOnOverlay,
 		currentSegmentIndex,
 		dynamicCanvasHeight,
-		hasDrawnSomething,
+		hasDrawnSomething, // Now a computed value
 		setMessage,
 	]);
 
@@ -452,8 +566,7 @@ export default function GameRoom({
 		canDrawOrPlaceLine &&
 		!isWaitingForOtherPlayers &&
 		!isGameOver &&
-		(isPlacingRedLine ||
-			(isLastSegment && hasDrawnSomething && !isDrawing));
+		(isPlacingRedLine || (isLastSegment && hasDrawnSomething)); // Simplified condition
 
 	return (
 		<div className="w-full max-w-3xl flex flex-col items-center relative">
@@ -554,7 +667,9 @@ export default function GameRoom({
 							className="absolute bottom-2 right-2 z-40 flex space-x-2" // Position bottom-right within the game container, added flex and space-x-2 for buttons
 						>
 							<GameButtons
-								clearCanvas={clearCanvas}
+								// Removed clearCanvas, replaced with undo/redo
+								handleUndo={handleUndo} // NEW
+								handleRedo={handleRedo} // NEW
 								isGameOver={isGameOver}
 								canDrawOrPlaceLine={canDrawOrPlaceLine}
 								handleDoneDrawing={handleDoneDrawing}
@@ -565,8 +680,8 @@ export default function GameRoom({
 								isWaitingForOtherPlayers={
 									isWaitingForOtherPlayers
 								}
-								hasDrawnSomething={hasDrawnSomething}
-								isDrawing={isDrawing}
+								hasDrawnSomething={hasDrawnSomething} // Now derived from drawingHistory.length
+								isDrawing={isDrawingRef.current} // Use ref value
 							></GameButtons>
 						</div>
 					</div>
