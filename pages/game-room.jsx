@@ -595,7 +595,11 @@ export default function GameRoom({
 							ref={drawingCanvasRef}
 							// width and height attributes are set in useEffect for dynamic sizing
 							className="absolute top-0 left-0 w-full h-full rounded-lg border-2 border-solid border-gray-400 box-border" // Added box-border
-							style={{ zIndex: 0 }}
+							style={{
+								zIndex: 0,
+								userSelect: 'none',
+								WebkitUserSelect: 'none',
+							}} // ADDED OR MERGED THIS LINE
 						></canvas>
 
 						{/* Message displayed within the canvas container */}
@@ -657,8 +661,12 @@ export default function GameRoom({
 								canDrawOrPlaceLine
 									? 'cursor-crosshair'
 									: 'cursor-not-allowed'
-							} touch-none`}
-							style={{ zIndex: 2 }}
+							} touch-none select-none`} // ADDED 'select-none' here
+							style={{
+								zIndex: 2,
+								userSelect: 'none',
+								WebkitUserSelect: 'none',
+							}} // ADDED OR MERGED THIS LINE
 						></canvas>
 
 						{/* Overlay when waiting for other players */}
