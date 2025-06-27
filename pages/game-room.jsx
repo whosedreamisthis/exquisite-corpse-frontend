@@ -577,8 +577,7 @@ export default function GameRoom({
 		(isPlacingRedLine || (isLastSegment && hasDrawnSomething)); // Simplified condition
 
 	return (
-		<div className="w-full max-w-3xl flex flex-col items-center relative">
-			{' '}
+		<div className="w-full max-w-3xl flex flex-col items-center relative justify-center">
 			{/* This is the main game container */}
 			{!isGameOver ? ( // Conditional rendering for the main canvas and its controls
 				<>
