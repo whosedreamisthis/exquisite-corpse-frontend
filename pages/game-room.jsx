@@ -29,6 +29,11 @@ export default function GameRoom({
 	setCanDrawOrPlaceLine, // Accept the setter
 	setIsWaitingForOtherPlayers, // Accept the setter
 }) {
+	useEffect(() => {
+		if (typeof window !== 'undefined') {
+			window.scrollTo(0, 0);
+		}
+	}, [gameRoomId]);
 	// Refs for the two canvases and their contexts
 	const drawingCanvasRef = useRef(null); // Main canvas for actual drawing
 	const drawingContextRef = useRef(null);
