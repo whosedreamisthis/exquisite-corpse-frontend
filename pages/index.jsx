@@ -135,6 +135,7 @@ export default function ExquisiteCorpseGame() {
 
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
+		let reconnectTimeoutId;
 		if (hasJoinedGame && !wsRef.current) {
 			console.log('Attempting to establish WebSocket connection...');
 			const ws = new WebSocket(WS_URL);
@@ -229,10 +230,8 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onclose = () => {
 				console.log('WebSocket disconnected.');
-				setMessage(
-					'Disconnected from game. Please create or rejoin a game.'
-				);
-				setHasJoinedGame(false);
+				setMessage('Connection lost. Attempting to reconnect...');
+
 				setCurrentPlayersWsId(null);
 				wsRef.current = null;
 				setShouldAttemptReconnect(true); // Set to true to trigger a reconnect attempt
@@ -240,9 +239,8 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onerror = (error) => {
 				console.error('WebSocket error:', error);
-				setMessage('WebSocket error. Check console for details.');
+				setMessage('WebSocket error. Attempting to reconnect...');
 				wsRef.current = null;
-				setHasJoinedGame(false);
 				setShouldAttemptReconnect(true);
 			};
 
@@ -255,6 +253,20 @@ export default function ExquisiteCorpseGame() {
 					wsRef.current.close();
 				}
 				wsRef.current = null;
+				clearTimeout(reconnectTimeoutId);
+			};
+		} else if (shouldAttemptReconnect && hasJoinedGame) {
+			// Only attempt reconnect if shouldAttemptReconnect is true AND we are supposed to be in a game
+			reconnectTimeoutId = setTimeout(() => {
+				console.log('Attempting to reconnect...');
+				// Set wsRef.current to null to force the useEffect to re-run and create a new WebSocket
+				wsRef.current = null;
+				// This will trigger the useEffect due to `wsRef.current` being null and `hasJoinedGame` being true
+				// We don't change shouldAttemptReconnect here; it will be set to false on successful open.
+			}, 3000); // Wait 3 seconds before attempting to reconnect
+
+			return () => {
+				clearTimeout(reconnectTimeoutId); // Clean up timeout if component re-renders or unmounts
 			};
 		}
 	}, [
