@@ -5,10 +5,10 @@ import GameRoom from './game-room.jsx'; // Import the new GameRoom component
 import Lobby from './lobby.jsx'; // Corrected import path
 import Loader from './loader';
 // const WS_URL = 'wss://your-render-backend-name.onrender.com';
-//const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
-//const BASE_URL = 'http://localhost:8080';
-const WS_URL = 'wss://satin-lumbar-book.glitch.me';
-const BASE_URL = 'https://satin-lumbar-book.glitch.me';
+const WS_URL = 'ws://localhost:8080'; // Correct protocol for WebSockets
+const BASE_URL = 'http://localhost:8080';
+//const WS_URL = 'wss://satin-lumbar-book.glitch.me';
+//const BASE_URL = 'https://satin-lumbar-book.glitch.me';
 // Define total segments here
 const TOTAL_SEGMENTS = 4;
 const segments = ['Head', 'Torso', 'Legs', 'Feet']; // Matches backend messaging
@@ -108,6 +108,27 @@ export default function ExquisiteCorpseGame() {
 			if (typeof window !== 'undefined') {
 				window.removeEventListener('resize', updateCanvasSize);
 			}
+		};
+	}, []);
+
+	// STEP 1 ADDITION: Detect browser visibility changes
+	useEffect(() => {
+		const handleVisibilityChange = () => {
+			if (document.visibilityState === 'visible') {
+				console.log('Browser tab became visible.');
+				// In the next steps, we'll add the reconnect logic here
+			} else {
+				console.log('Browser tab became hidden.');
+			}
+		};
+
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+
+		return () => {
+			document.removeEventListener(
+				'visibilitychange',
+				handleVisibilityChange
+			);
 		};
 	}, []);
 
