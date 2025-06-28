@@ -49,6 +49,7 @@ export default function ExquisiteCorpseGame() {
 	const [dynamicCanvasWidth, setDynamicCanvasWidth] = useState(0);
 	const [dynamicCanvasHeight, setDynamicCanvasHeight] = useState(0);
 	const [isLoading, setIsLoading] = useState(false);
+	const [shouldAttemptReconnect, setShouldAttemptReconnect] = useState(false);
 
 	// Dynamically update canvas size
 	useEffect(() => {
@@ -150,6 +151,7 @@ export default function ExquisiteCorpseGame() {
 						playerId: null,
 					})
 				);
+				setShouldAttemptReconnect(false); // Connection successful, no need to reconnect
 			};
 
 			ws.onmessage = (event) => {
@@ -233,6 +235,7 @@ export default function ExquisiteCorpseGame() {
 				setHasJoinedGame(false);
 				setCurrentPlayersWsId(null);
 				wsRef.current = null;
+				setShouldAttemptReconnect(true); // Set to true to trigger a reconnect attempt
 			};
 
 			ws.onerror = (error) => {
@@ -240,6 +243,7 @@ export default function ExquisiteCorpseGame() {
 				setMessage('WebSocket error. Check console for details.');
 				wsRef.current = null;
 				setHasJoinedGame(false);
+				setShouldAttemptReconnect(true);
 			};
 
 			return () => {
@@ -253,7 +257,13 @@ export default function ExquisiteCorpseGame() {
 				wsRef.current = null;
 			};
 		}
-	}, [hasJoinedGame, generatedGameCode, gameCode, currentPlayersWsId]);
+	}, [
+		hasJoinedGame,
+		generatedGameCode,
+		gameCode,
+		currentPlayersWsId,
+		shouldAttemptReconnect,
+	]);
 
 	// --- Game Setup / Join ---
 	const createNewGame = async () => {
@@ -266,6 +276,7 @@ export default function ExquisiteCorpseGame() {
 			setGameCode('');
 			setMessage(`Game created! Share this code: ${newGameCode}`);
 			setHasJoinedGame(true);
+			setShouldAttemptReconnect(false);
 		} catch (error) {
 			console.error('Error creating game:', error);
 			setMessage('Failed to create game. Please try again.');
@@ -280,6 +291,7 @@ export default function ExquisiteCorpseGame() {
 		setGeneratedGameCode('');
 		setMessage(`Attempting to join game ${gameCode}...`);
 		setHasJoinedGame(true);
+		setShouldAttemptReconnect(false);
 	};
 
 	const handlePlayAgain = useCallback(() => {
@@ -305,6 +317,7 @@ export default function ExquisiteCorpseGame() {
 		setFinalArtwork2(null);
 		setHasJoinedGame(false);
 		setCurrentPlayersWsId(null);
+		setShouldAttemptReconnect(false);
 	}, []);
 
 	return (
