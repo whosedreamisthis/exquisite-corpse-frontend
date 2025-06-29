@@ -117,7 +117,24 @@ export default function ExquisiteCorpseGame() {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === 'visible') {
 				console.log('Browser tab became visible.');
-				// In the next steps, we'll add the reconnect logic here
+				if (
+					!wsRef.current ||
+					wsRef.current.readyState === WebSocket.CLOSED
+				) {
+					if (
+						hasJoinedGame &&
+						(generatedGameCode || gameCode) &&
+						currentPlayersWsId
+					) {
+						console.log(
+							'Attempting to reconnect via explicit message on tab visible...'
+						);
+						// Set shouldAttemptReconnect to true to trigger the main WebSocket useEffect
+						setShouldAttemptReconnect(true);
+						// The main useEffect will then try to establish the connection and send joinGame
+						// The server-side will handle this as a reconnect based on playerId and gameCode
+					}
+				}
 			} else {
 				console.log('Browser tab became hidden.');
 			}
