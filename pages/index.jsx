@@ -117,6 +117,7 @@ export default function ExquisiteCorpseGame() {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === 'visible') {
 				console.log('Browser tab became visible.');
+				// STEP 2 ADDITION: Reconnect on tab visibility if disconnected
 				if (
 					!wsRef.current ||
 					wsRef.current.readyState === WebSocket.CLOSED
@@ -162,13 +163,28 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onopen = () => {
 				console.log('WebSocket connected. Sending joinGame message...');
-				ws.send(
-					JSON.stringify({
-						type: 'joinGame',
-						gameCode: codeToJoinOnOpen,
-						playerId: null,
-					})
-				);
+				// Check if this is a reconnection attempt based on currentPlayersWsId
+				if (currentPlayersWsId) {
+					console.log(
+						`Sending reconnectGame for playerId: ${currentPlayersWsId}`
+					);
+					ws.send(
+						JSON.stringify({
+							type: 'reconnectGame',
+							gameCode: generatedGameCode || gameCode,
+							playerId: currentPlayersWsId,
+						})
+					);
+				} else {
+					// Original joinGame logic for new sessions
+					ws.send(
+						JSON.stringify({
+							type: 'joinGame',
+							gameCode: codeToJoinOnOpen,
+							playerId: null,
+						})
+					);
+				}
 				setShouldAttemptReconnect(false); // Connection successful, no need to reconnect
 			};
 
@@ -227,7 +243,8 @@ export default function ExquisiteCorpseGame() {
 
 				if (
 					data.type === 'initialState' ||
-					data.type === 'gameStarted'
+					data.type === 'gameStarted' ||
+					data.type === 'reconnected' // Handle reconnected state
 				) {
 					setGameCode(data.gameCode || gameCode);
 					setGeneratedGameCode(data.gameCode || generatedGameCode);
