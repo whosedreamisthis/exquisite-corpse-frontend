@@ -97,7 +97,7 @@ export default function ExquisiteCorpseGame() {
 				}
 
 				setDynamicCanvasWidth(Math.round(newWidth));
-				+setDynamicCanvasHeight(Math.round(newHeight));
+				setDynamicCanvasHeight(Math.round(newHeight));
 			}
 		}
 
@@ -234,25 +234,28 @@ export default function ExquisiteCorpseGame() {
 					'WebSocket disconnected. Intentional close flag:',
 					isClosingIntentionallyRef.current
 				); // Added console log for debugging
-				// If the close was intentional (e.g., "Play Again" clicked)
 				if (isClosingIntentionallyRef.current) {
+					// Check this flag first
 					isClosingIntentionallyRef.current = false; // Reset the flag after the intentional close is handled
 					console.log(
 						"Intentional disconnect detected in onclose. Preventing 'Connection lost' message."
 					);
 					return; // Exit, do not proceed with "Connection lost" logic
 				}
-				// If the close was NOT intentional (e.g., actual network disconnect)
-				// Only set message and trigger reconnect if hasJoinedGame is still true (i.e., not intentionally returning to lobby)
-				if (hasJoinedGame) {
-					// Add this check
+				// If we reach here, it's either an unintentional disconnect OR the intentional flag was reset too early.
+				// Crucially, if we are not in a game anymore (hasJoinedGame is false), we should go to the lobby state.
+				if (!hasJoinedGame) {
+					// If hasJoinedGame is false, we are either in lobby or returning.
+					setMessage('Enter a game code to join or create one!'); // Ensure lobby message
+					setShouldAttemptReconnect(false); // Ensure no reconnection attempts
+					wsRef.current = null; // Clear WebSocket reference
+					setCurrentPlayersWsId(null); // Clear player ID
+					return; // Done. Don't show "Connection lost".
+				} else {
 					setMessage('Connection lost. Attempting to reconnect...');
 					setCurrentPlayersWsId(null);
 					wsRef.current = null; // Clear WebSocket reference to force new connection on reconnect
 					setShouldAttemptReconnect(true);
-				} else {
-					// If not in a game, likely transitioning back to lobby, ensure correct message.
-					setMessage('Enter a game code to join or create one!');
 				}
 			};
 
