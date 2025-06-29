@@ -49,6 +49,7 @@ export default function ExquisiteCorpseGame() {
 	const [dynamicCanvasWidth, setDynamicCanvasWidth] = useState(0);
 	const [dynamicCanvasHeight, setDynamicCanvasHeight] = useState(0);
 	const [isLoading, setIsLoading] = useState(false);
+	const isClosingIntentionallyRef = useRef(false); // New ref to indicate intentional close
 	const [shouldAttemptReconnect, setShouldAttemptReconnect] = useState(false);
 
 	// Dynamically update canvas size
@@ -117,25 +118,7 @@ export default function ExquisiteCorpseGame() {
 		const handleVisibilityChange = () => {
 			if (document.visibilityState === 'visible') {
 				console.log('Browser tab became visible.');
-				// STEP 2 ADDITION: Reconnect on tab visibility if disconnected
-				if (
-					!wsRef.current ||
-					wsRef.current.readyState === WebSocket.CLOSED
-				) {
-					if (
-						hasJoinedGame &&
-						(generatedGameCode || gameCode) &&
-						currentPlayersWsId
-					) {
-						console.log(
-							'Attempting to reconnect via explicit message on tab visible...'
-						);
-						// Set shouldAttemptReconnect to true to trigger the main WebSocket useEffect
-						setShouldAttemptReconnect(true);
-						// The main useEffect will then try to establish the connection and send joinGame
-						// The server-side will handle this as a reconnect based on playerId and gameCode
-					}
-				}
+				// In the next steps, we'll add the reconnect logic here
 			} else {
 				console.log('Browser tab became hidden.');
 			}
@@ -163,28 +146,13 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onopen = () => {
 				console.log('WebSocket connected. Sending joinGame message...');
-				// Check if this is a reconnection attempt based on currentPlayersWsId
-				if (currentPlayersWsId) {
-					console.log(
-						`Sending reconnectGame for playerId: ${currentPlayersWsId}`
-					);
-					ws.send(
-						JSON.stringify({
-							type: 'reconnectGame',
-							gameCode: generatedGameCode || gameCode,
-							playerId: currentPlayersWsId,
-						})
-					);
-				} else {
-					// Original joinGame logic for new sessions
-					ws.send(
-						JSON.stringify({
-							type: 'joinGame',
-							gameCode: codeToJoinOnOpen,
-							playerId: null,
-						})
-					);
-				}
+				ws.send(
+					JSON.stringify({
+						type: 'joinGame',
+						gameCode: codeToJoinOnOpen,
+						playerId: null,
+					})
+				);
 				setShouldAttemptReconnect(false); // Connection successful, no need to reconnect
 			};
 
@@ -243,8 +211,7 @@ export default function ExquisiteCorpseGame() {
 
 				if (
 					data.type === 'initialState' ||
-					data.type === 'gameStarted' ||
-					data.type === 'reconnected' // Handle reconnected state
+					data.type === 'gameStarted'
 				) {
 					setGameCode(data.gameCode || gameCode);
 					setGeneratedGameCode(data.gameCode || generatedGameCode);
@@ -263,12 +230,30 @@ export default function ExquisiteCorpseGame() {
 			};
 
 			ws.onclose = () => {
-				console.log('WebSocket disconnected.');
-				setMessage('Connection lost. Attempting to reconnect...');
-
-				setCurrentPlayersWsId(null);
-				wsRef.current = null;
-				setShouldAttemptReconnect(true); // Set to true to trigger a reconnect attempt
+				console.log(
+					'WebSocket disconnected. Intentional close flag:',
+					isClosingIntentionallyRef.current
+				); // Added console log for debugging
+				// If the close was intentional (e.g., "Play Again" clicked)
+				if (isClosingIntentionallyRef.current) {
+					isClosingIntentionallyRef.current = false; // Reset the flag after the intentional close is handled
+					console.log(
+						"Intentional disconnect detected in onclose. Preventing 'Connection lost' message."
+					);
+					return; // Exit, do not proceed with "Connection lost" logic
+				}
+				// If the close was NOT intentional (e.g., actual network disconnect)
+				// Only set message and trigger reconnect if hasJoinedGame is still true (i.e., not intentionally returning to lobby)
+				if (hasJoinedGame) {
+					// Add this check
+					setMessage('Connection lost. Attempting to reconnect...');
+					setCurrentPlayersWsId(null);
+					wsRef.current = null; // Clear WebSocket reference to force new connection on reconnect
+					setShouldAttemptReconnect(true);
+				} else {
+					// If not in a game, likely transitioning back to lobby, ensure correct message.
+					setMessage('Enter a game code to join or create one!');
+				}
 			};
 
 			ws.onerror = (error) => {
@@ -341,16 +326,24 @@ export default function ExquisiteCorpseGame() {
 	};
 
 	const handlePlayAgain = useCallback(() => {
+		// Set flag to indicate intentional close *before* closing the WebSocket
+		isClosingIntentionallyRef.current = true;
+
+		// Ensure the WebSocket is closed if it's open
 		if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
 			wsRef.current.close();
 		}
+
+		// Crucial: Manually set wsRef.current to null immediately
+		// This explicitly signals the useEffect that no WebSocket is active.
 		wsRef.current = null;
 
 		// Reset all game-specific states to their initial, pre-joined game values
+		setMessage('Enter a game code to join or create one!');
+		setHasJoinedGame(false);
 		setGameCode('');
 		setGeneratedGameCode('');
 		setGameRoomId(null);
-		setMessage('Enter a game code to join or create one!');
 		setPlayerCount(0);
 		setCurrentSegmentIndex(0);
 		setCurrentSegment(segments[1]);
@@ -361,9 +354,10 @@ export default function ExquisiteCorpseGame() {
 		setIsGameOver(false);
 		setFinalArtwork(null);
 		setFinalArtwork2(null);
-		setHasJoinedGame(false);
 		setCurrentPlayersWsId(null);
-		setShouldAttemptReconnect(false);
+		setShouldAttemptReconnect(false); // Ensure no reconnection attempts when returning to lobby
+		// isClosingIntentionallyRef.current is reset within onclose or if a new WS connects.
+		// If onclose doesn't fire for some reason, it's fine, as it won't affect new connections.
 	}, []);
 
 	return (
