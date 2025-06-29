@@ -51,6 +51,7 @@ export default function ExquisiteCorpseGame() {
 	const [isLoading, setIsLoading] = useState(false);
 	const isClosingIntentionallyRef = useRef(false); // New ref to indicate intentional close
 	const [shouldAttemptReconnect, setShouldAttemptReconnect] = useState(false);
+	const [redLinePlaced, setRedLinePlaced] = useState(false); // Added for GameRoom prop
 
 	// Dynamically update canvas size
 	useEffect(() => {
@@ -137,6 +138,7 @@ export default function ExquisiteCorpseGame() {
 	// WebSocket Initialization and Message Handling
 	useEffect(() => {
 		let reconnectTimeoutId;
+		// Only establish connection if a game has been joined AND no existing WS is active
 		if (hasJoinedGame && !wsRef.current) {
 			console.log('Attempting to establish WebSocket connection...');
 			const ws = new WebSocket(WS_URL);
@@ -146,11 +148,12 @@ export default function ExquisiteCorpseGame() {
 
 			ws.onopen = () => {
 				console.log('WebSocket connected. Sending joinGame message...');
+				// Send currentPlayersWsId to allow server to recognize rejoining players
 				ws.send(
 					JSON.stringify({
 						type: 'joinGame',
 						gameCode: codeToJoinOnOpen,
-						playerId: null,
+						playerId: currentPlayersWsId, // Pass the existing playerId here
 					})
 				);
 				setShouldAttemptReconnect(false); // Connection successful, no need to reconnect
@@ -175,6 +178,8 @@ export default function ExquisiteCorpseGame() {
 				setIsWaitingForOtherPlayers(data.isWaitingForOthers || false);
 				setGameRoomId(data.gameRoomId || null);
 
+				// IMPORTANT CHANGE: Update playerId ONLY if it's new/different
+				// This update will NOT trigger the useEffect cleanup due to dependency removal below.
 				if (data.playerId && data.playerId !== currentPlayersWsId) {
 					setCurrentPlayersWsId(data.playerId);
 				}
@@ -196,6 +201,7 @@ export default function ExquisiteCorpseGame() {
 						? null
 						: data.previousRedLineY || null
 				);
+				setRedLinePlaced(data.redLinePlaced || false); // Update redLinePlaced state
 
 				if (data.status === 'completed') {
 					setIsGameOver(true);
@@ -211,11 +217,12 @@ export default function ExquisiteCorpseGame() {
 
 				if (
 					data.type === 'initialState' ||
-					data.type === 'gameStarted'
+					data.type === 'gameStarted' ||
+					data.type === 'reconnected' || // Ensure reconnected also updates these
+					data.type === 'gameJoined'
 				) {
 					setGameCode(data.gameCode || gameCode);
 					setGeneratedGameCode(data.gameCode || generatedGameCode);
-					// setCanDrawOrPlaceLine(data.canDraw);
 					setIsWaitingForOtherPlayers(data.isWaitingForOthers);
 					setReceivedCanvasImage(data.canvasData);
 					setPreviousRedLineY(data.previousRedLineY || null);
@@ -233,29 +240,26 @@ export default function ExquisiteCorpseGame() {
 				console.log(
 					'WebSocket disconnected. Intentional close flag:',
 					isClosingIntentionallyRef.current
-				); // Added console log for debugging
+				);
 				if (isClosingIntentionallyRef.current) {
-					// Check this flag first
-					isClosingIntentionallyRef.current = false; // Reset the flag after the intentional close is handled
+					isClosingIntentionallyRef.current = false;
 					console.log(
 						"Intentional disconnect detected in onclose. Preventing 'Connection lost' message."
 					);
-					return; // Exit, do not proceed with "Connection lost" logic
+					return; // Exit, as it was an intentional close
 				}
-				// If we reach here, it's either an unintentional disconnect OR the intentional flag was reset too early.
-				// Crucially, if we are not in a game anymore (hasJoinedGame is false), we should go to the lobby state.
-				if (!hasJoinedGame) {
-					// If hasJoinedGame is false, we are either in lobby or returning.
-					setMessage('Enter a game code to join or create one!'); // Ensure lobby message
-					setShouldAttemptReconnect(false); // Ensure no reconnection attempts
-					wsRef.current = null; // Clear WebSocket reference
-					setCurrentPlayersWsId(null); // Clear player ID
-					return; // Done. Don't show "Connection lost".
-				} else {
+
+				// IMPORTANT CHANGE: Do NOT clear currentPlayersWsId here if still in game
+				if (hasJoinedGame) {
 					setMessage('Connection lost. Attempting to reconnect...');
-					setCurrentPlayersWsId(null);
 					wsRef.current = null; // Clear WebSocket reference to force new connection on reconnect
-					setShouldAttemptReconnect(true);
+					setShouldAttemptReconnect(true); // Signal to attempt reconnection
+				} else {
+					// If not in a game (e.g., after playAgain or component unmounts without intentional close)
+					setMessage('Enter a game code to join or create one!');
+					setShouldAttemptReconnect(false);
+					wsRef.current = null;
+					setCurrentPlayersWsId(null); // Clear ID when truly leaving game context
 				}
 			};
 
@@ -266,25 +270,32 @@ export default function ExquisiteCorpseGame() {
 				setShouldAttemptReconnect(true);
 			};
 
+			// Cleanup function for useEffect
 			return () => {
+				console.log('Cleaning up WebSocket connection...');
 				if (
 					wsRef.current &&
 					wsRef.current.readyState === WebSocket.OPEN
 				) {
-					console.log('Cleaning up WebSocket connection...');
-					wsRef.current.close();
+					// Only close the WebSocket if it's an intentional close,
+					// or if hasJoinedGame becomes false (indicating leaving the game context)
+					if (isClosingIntentionallyRef.current || !hasJoinedGame) {
+						wsRef.current.close();
+					}
 				}
-				wsRef.current = null;
+				// Do NOT unconditionally set wsRef.current = null here.
+				// The onclose/onerror handlers are responsible for setting it null
+				// when a disconnect genuinely occurs, which then triggers the reconnect logic.
 				clearTimeout(reconnectTimeoutId);
 			};
-		} else if (shouldAttemptReconnect && hasJoinedGame) {
+		} else if (shouldAttemptReconnect && hasJoinedGame && !wsRef.current) {
 			// Only attempt reconnect if shouldAttemptReconnect is true AND we are supposed to be in a game
+			// AND there is no current WebSocket instance.
 			reconnectTimeoutId = setTimeout(() => {
 				console.log('Attempting to reconnect...');
-				// Set wsRef.current to null to force the useEffect to re-run and create a new WebSocket
-				wsRef.current = null;
-				// This will trigger the useEffect due to `wsRef.current` being null and `hasJoinedGame` being true
-				// We don't change shouldAttemptReconnect here; it will be set to false on successful open.
+				// By setting shouldAttemptReconnect to true, this effectively triggers the main `if` block
+				// of this useEffect in the next render cycle, as `wsRef.current` would be null from onclose/onerror.
+				setShouldAttemptReconnect(true);
 			}, 3000); // Wait 3 seconds before attempting to reconnect
 
 			return () => {
@@ -295,8 +306,9 @@ export default function ExquisiteCorpseGame() {
 		hasJoinedGame,
 		generatedGameCode,
 		gameCode,
-		currentPlayersWsId,
 		shouldAttemptReconnect,
+		// IMPORTANT CHANGE: currentPlayersWsId is INTENTIONALLY REMOVED from dependencies.
+		// Its change should not trigger re-creation of the WebSocket.
 	]);
 
 	// --- Game Setup / Join ---
@@ -349,7 +361,7 @@ export default function ExquisiteCorpseGame() {
 		setGameRoomId(null);
 		setPlayerCount(0);
 		setCurrentSegmentIndex(0);
-		setCurrentSegment(segments[1]);
+		setCurrentSegment(segments[0]); // Reset to Head for the first segment
 		setCanDrawOrPlaceLine(false);
 		setIsWaitingForOtherPlayers(false);
 		setReceivedCanvasImage(null);
@@ -357,10 +369,10 @@ export default function ExquisiteCorpseGame() {
 		setIsGameOver(false);
 		setFinalArtwork(null);
 		setFinalArtwork2(null);
-		setCurrentPlayersWsId(null);
+		setCurrentPlayersWsId(null); // Explicitly clear for a fresh start
 		setShouldAttemptReconnect(false); // Ensure no reconnection attempts when returning to lobby
+		setRedLinePlaced(false); // Reset redLinePlaced
 		// isClosingIntentionallyRef.current is reset within onclose or if a new WS connects.
-		// If onclose doesn't fire for some reason, it's fine, as it won't affect new connections.
 	}, []);
 
 	return (
@@ -404,6 +416,8 @@ export default function ExquisiteCorpseGame() {
 					dynamicCanvasWidth={dynamicCanvasWidth}
 					dynamicCanvasHeight={dynamicCanvasHeight}
 					backendCanvasHeight={BACKEND_CANVAS_HEIGHT} // Pass backend canvas height
+					setRedLinePlaced={setRedLinePlaced} // Pass the setter
+					redLinePlaced={redLinePlaced} // Pass the state
 				/>
 			)}
 		</div>
